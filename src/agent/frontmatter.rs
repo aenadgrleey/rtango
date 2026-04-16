@@ -12,9 +12,7 @@ pub struct FrontMatter {
 
 pub trait FrontMatterMapper {
     fn parse_frontmatter(&self, yaml: &str) -> anyhow::Result<FrontMatter>;
-    fn serialize_frontmatter(&self, fm: &FrontMatter) -> anyhow::Result<String>;
     fn parse_permission(&self, token: &str) -> Permission;
-    fn format_permission(&self, perm: &Permission) -> Option<String>;
 }
 
 pub fn split_frontmatter(content: &str) -> (Option<&str>, &str) {

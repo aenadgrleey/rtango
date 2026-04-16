@@ -53,26 +53,6 @@ impl FrontMatterMapper for ClaudeCodeParser {
         }
     }
 
-    fn format_permission(&self, perm: &Permission) -> Option<String> {
-        Some(match perm {
-            Permission::Read => "Read".into(),
-            Permission::Write => "Write".into(),
-            Permission::Edit => "Edit".into(),
-            Permission::Shell(None) => "Bash".into(),
-            Permission::Shell(Some(p)) => format!("Bash({p})"),
-            Permission::Grep => "Grep".into(),
-            Permission::Glob => "Glob".into(),
-            Permission::WebFetch => "WebFetch".into(),
-            Permission::WebSearch => "WebSearch".into(),
-            Permission::NotebookRead => "NotebookRead".into(),
-            Permission::NotebookEdit => "NotebookEdit".into(),
-            Permission::TodoRead => "TodoRead".into(),
-            Permission::TodoWrite => "TodoWrite".into(),
-            Permission::ListDir => "LS".into(),
-            Permission::Other(s) => s.clone(),
-        })
-    }
-
     fn parse_frontmatter(&self, yaml: &str) -> anyhow::Result<FrontMatter> {
         let raw: BTreeMap<String, serde_yml::Value> = serde_yml::from_str(yaml)?;
         let mut fm = FrontMatter::default();
@@ -95,30 +75,6 @@ impl FrontMatterMapper for ClaudeCodeParser {
         Ok(fm)
     }
 
-    fn serialize_frontmatter(&self, fm: &FrontMatter) -> anyhow::Result<String> {
-        let mut map = BTreeMap::<String, serde_yml::Value>::new();
-
-        if let Some(name) = &fm.name {
-            map.insert("name".into(), serde_yml::Value::String(name.clone()));
-        }
-        if let Some(desc) = &fm.description {
-            map.insert("description".into(), serde_yml::Value::String(desc.clone()));
-        }
-        if !fm.allowed_tools.is_empty() {
-            let tools: Vec<String> = fm.allowed_tools.iter()
-                .filter_map(|p| self.format_permission(p))
-                .collect();
-            if !tools.is_empty() {
-                map.insert("allowed-tools".into(), serde_yml::Value::String(tools.join(" ")));
-            }
-        }
-
-        for (k, v) in &fm.extra {
-            map.entry(k.clone()).or_insert_with(|| v.clone());
-        }
-
-        Ok(serde_yml::to_string(&map)?)
-    }
 }
 
 fn extract_string(map: &BTreeMap<String, serde_yml::Value>, key: &str) -> Option<String> {

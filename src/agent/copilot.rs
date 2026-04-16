@@ -45,21 +45,6 @@ impl FrontMatterMapper for CopilotParser {
         }
     }
 
-    fn format_permission(&self, perm: &Permission) -> Option<String> {
-        Some(match perm {
-            Permission::Read => "read".into(),
-            Permission::Write => "write".into(),
-            Permission::Edit => "edit".into(),
-            Permission::Shell(_) => "shell".into(),
-            Permission::Grep => "grep".into(),
-            Permission::Glob => "glob".into(),
-            Permission::WebFetch => "web_fetch".into(),
-            Permission::WebSearch => "web_search".into(),
-            Permission::Other(s) => s.clone(),
-            _ => return None,
-        })
-    }
-
     fn parse_frontmatter(&self, yaml: &str) -> anyhow::Result<FrontMatter> {
         let raw: BTreeMap<String, serde_yml::Value> = serde_yml::from_str(yaml)?;
         let mut fm = FrontMatter::default();
@@ -82,30 +67,6 @@ impl FrontMatterMapper for CopilotParser {
         Ok(fm)
     }
 
-    fn serialize_frontmatter(&self, fm: &FrontMatter) -> anyhow::Result<String> {
-        let mut map = BTreeMap::<String, serde_yml::Value>::new();
-
-        if let Some(name) = &fm.name {
-            map.insert("name".into(), serde_yml::Value::String(name.clone()));
-        }
-        if let Some(desc) = &fm.description {
-            map.insert("description".into(), serde_yml::Value::String(desc.clone()));
-        }
-        if !fm.allowed_tools.is_empty() {
-            let tools: Vec<String> = fm.allowed_tools.iter()
-                .filter_map(|p| self.format_permission(p))
-                .collect();
-            if !tools.is_empty() {
-                map.insert("allowed-tools".into(), serde_yml::Value::String(tools.join(" ")));
-            }
-        }
-
-        for (k, v) in &fm.extra {
-            map.entry(k.clone()).or_insert_with(|| v.clone());
-        }
-
-        Ok(serde_yml::to_string(&map)?)
-    }
 }
 
 fn extract_string(map: &BTreeMap<String, serde_yml::Value>, key: &str) -> Option<String> {

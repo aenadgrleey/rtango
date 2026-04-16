@@ -1,8 +1,4 @@
-mod agent;
 mod cmd;
-mod engine;
-mod error;
-mod spec;
 
 use clap::Parser;
 use cmd::Cli;
