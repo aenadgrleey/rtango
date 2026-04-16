@@ -1,3 +1,4 @@
+mod agent;
 mod cmd;
 mod engine;
 mod error;
