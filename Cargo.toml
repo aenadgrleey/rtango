@@ -1,0 +1,10 @@
+[package]
+name = "rtango"
+version = "0.1.0"
+edition = "2024"
+description = "Package manager for agent skills and configuration files"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+thiserror = "2"
