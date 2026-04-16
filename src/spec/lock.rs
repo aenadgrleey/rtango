@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use super::source::Source;
-use super::spec::{AgentName, DeployMode};
+use super::spec::AgentName;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Lock {
@@ -21,5 +21,4 @@ pub struct Deployment {
     pub source_hash: String,
     pub content: PathBuf,
     pub content_hash: String,
-    pub mode: DeployMode,
 }
