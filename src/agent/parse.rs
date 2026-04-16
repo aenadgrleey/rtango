@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::spec::AgentName;
 
+use super::frontmatter::{FrontMatter, FrontMatterMapper, split_frontmatter};
 use super::{Agent, AgentSet, Skill, SkillSet};
 
 pub trait SkillsParser {
@@ -18,7 +19,10 @@ pub trait AgentsParser {
 /// Parse skills from subdirectories containing `SKILL.md`.
 ///
 /// Layout: `<dir>/<name>/SKILL.md`
-pub fn parse_standard_skills(dir: &Path) -> anyhow::Result<SkillSet> {
+pub fn parse_standard_skills(
+    dir: &Path,
+    mapper: &dyn FrontMatterMapper,
+) -> anyhow::Result<SkillSet> {
     let mut skills = Vec::new();
     if !dir.is_dir() {
         return Ok(skills);
@@ -32,10 +36,18 @@ pub fn parse_standard_skills(dir: &Path) -> anyhow::Result<SkillSet> {
         let skill_file = path.join("SKILL.md");
         if skill_file.is_file() {
             let name = entry.file_name().to_string_lossy().into_owned();
+            let content = fs::read_to_string(&skill_file)?;
+            let (yaml, body) = split_frontmatter(&content);
+            let front_matter = match yaml {
+                Some(y) => mapper.parse_frontmatter(y)?,
+                None => FrontMatter::default(),
+            };
             skills.push(Skill {
-                name,
+                name: name,
                 dir: path,
                 file: skill_file,
+                front_matter: front_matter,
+                body: body.to_string(),
             });
         }
     }
@@ -46,7 +58,10 @@ pub fn parse_standard_skills(dir: &Path) -> anyhow::Result<SkillSet> {
 /// Parse agents from flat `*.agent.md` files.
 ///
 /// Layout: `<dir>/<name>.agent.md`
-pub fn parse_standard_agents(dir: &Path) -> anyhow::Result<AgentSet> {
+pub fn parse_standard_agents(
+    dir: &Path,
+    mapper: &dyn FrontMatterMapper,
+) -> anyhow::Result<AgentSet> {
     let mut agents = Vec::new();
     if !dir.is_dir() {
         return Ok(agents);
@@ -59,9 +74,17 @@ pub fn parse_standard_agents(dir: &Path) -> anyhow::Result<AgentSet> {
         }
         let file_name = entry.file_name().to_string_lossy().into_owned();
         if let Some(name) = file_name.strip_suffix(".agent.md") {
+            let content = fs::read_to_string(&path)?;
+            let (yaml, body) = split_frontmatter(&content);
+            let front_matter = match yaml {
+                Some(y) => mapper.parse_frontmatter(y)?,
+                None => FrontMatter::default(),
+            };
             agents.push(Agent {
                 name: name.to_owned(),
                 file: path,
+                front_matter,
+                body: body.to_string(),
             });
         }
     }
