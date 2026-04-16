@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::spec::AgentName;
 
+use super::detect::{self, DetectedAgent, DetectedSource, Detector, SourceKind};
 use super::frontmatter::{FrontMatter, FrontMatterMapper, tokenize_tools};
 use super::parse::{self, AgentsParser, SkillsParser};
 use super::permission::Permission;
@@ -67,6 +68,45 @@ impl FrontMatterMapper for CopilotParser {
         Ok(fm)
     }
 
+}
+
+impl Detector for CopilotParser {
+    fn name(&self) -> AgentName {
+        AgentName::new("copilot")
+    }
+
+    fn detect(&self, root: &Path) -> Option<DetectedAgent> {
+        let skills_dir = root.join(".github/skills");
+        let agents_dir = root.join(".github/agents");
+
+        let has_skills = detect::dir_has_standard_skills(&skills_dir);
+        let has_agents = detect::dir_has_standard_agents(&agents_dir);
+
+        if !has_skills && !has_agents {
+            return None;
+        }
+
+        let mut sources = Vec::new();
+        if has_skills {
+            sources.push(DetectedSource {
+                id: "copilot-skills".into(),
+                path: PathBuf::from(".github/skills/"),
+                kind: SourceKind::SkillSet,
+            });
+        }
+        if has_agents {
+            sources.push(DetectedSource {
+                id: "copilot-agents".into(),
+                path: PathBuf::from(".github/agents/"),
+                kind: SourceKind::AgentSet,
+            });
+        }
+
+        Some(DetectedAgent {
+            name: Detector::name(self),
+            sources,
+        })
+    }
 }
 
 fn extract_string(map: &BTreeMap<String, serde_yml::Value>, key: &str) -> Option<String> {

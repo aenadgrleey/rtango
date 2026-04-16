@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::spec::AgentName;
 
+use super::detect::{self, DetectedAgent, DetectedSource, Detector, SourceKind};
 use super::frontmatter::{FrontMatter, FrontMatterMapper, tokenize_tools};
 use super::parse::{self, AgentsParser, SkillsParser};
 use super::permission::Permission;
@@ -75,6 +76,45 @@ impl FrontMatterMapper for ClaudeCodeParser {
         Ok(fm)
     }
 
+}
+
+impl Detector for ClaudeCodeParser {
+    fn name(&self) -> AgentName {
+        AgentName::new("claude-code")
+    }
+
+    fn detect(&self, root: &Path) -> Option<DetectedAgent> {
+        let skills_dir = root.join(".claude/skills");
+        let agents_dir = root.join(".claude/agents");
+
+        let has_skills = detect::dir_has_standard_skills(&skills_dir);
+        let has_agents = detect::dir_has_standard_agents(&agents_dir);
+
+        if !has_skills && !has_agents {
+            return None;
+        }
+
+        let mut sources = Vec::new();
+        if has_skills {
+            sources.push(DetectedSource {
+                id: "claude-code-skills".into(),
+                path: PathBuf::from(".claude/skills/"),
+                kind: SourceKind::SkillSet,
+            });
+        }
+        if has_agents {
+            sources.push(DetectedSource {
+                id: "claude-code-agents".into(),
+                path: PathBuf::from(".claude/agents/"),
+                kind: SourceKind::AgentSet,
+            });
+        }
+
+        Some(DetectedAgent {
+            name: Detector::name(self),
+            sources,
+        })
+    }
 }
 
 fn extract_string(map: &BTreeMap<String, serde_yml::Value>, key: &str) -> Option<String> {

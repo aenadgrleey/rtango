@@ -1,4 +1,4 @@
-mod init;
+pub mod init;
 mod status;
 mod sync;
 
@@ -60,8 +60,9 @@ pub enum Command {
 }
 
 pub fn run(cli: Cli) -> anyhow::Result<()> {
+    let root = std::env::current_dir()?;
     match cli.command {
-        Command::Init { force, agent, no_detect } => init::exec(force, agent, no_detect),
+        Command::Init { force, agent, no_detect } => init::exec(&root, force, agent, no_detect),
         Command::Sync { check, force, rule, adopt } => sync::exec(check, force, rule, adopt),
         Command::Status { rule, verbose } => status::exec(rule, verbose),
     }

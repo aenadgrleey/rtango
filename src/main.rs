@@ -1,9 +1,7 @@
-mod cmd;
-
 use clap::Parser;
-use cmd::Cli;
+use rtango::cmd::{Cli, run};
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    cmd::run(cli)
+    run(cli)
 }
