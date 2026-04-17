@@ -1,7 +1,7 @@
+use rtango::agent::PiParser;
 use rtango::agent::frontmatter::FrontMatterMapper;
 use rtango::agent::permission::Permission;
 use rtango::agent::write::FrontMatterWriter;
-use rtango::agent::PiParser;
 
 fn parser() -> PiParser {
     PiParser

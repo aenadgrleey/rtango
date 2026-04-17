@@ -14,14 +14,18 @@ const DIR: &str = ".codex";
 pub struct CodexParser;
 
 impl SkillsParser for CodexParser {
-    fn name(&self) -> AgentName { AgentName::new(NAME) }
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
         parse::parse_standard_skills(&root.join(format!("{DIR}/skills")), self)
     }
 }
 
 impl AgentsParser for CodexParser {
-    fn name(&self) -> AgentName { AgentName::new(NAME) }
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
     fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
         parse::parse_standard_agents(&root.join(format!("{DIR}/agents")), self)
     }
@@ -73,21 +77,27 @@ impl FrontMatterWriter for CodexParser {
 }
 
 impl SkillsWriter for CodexParser {
-    fn name(&self) -> AgentName { AgentName::new(NAME) }
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
     fn write_skill(&self, root: &Path, skill: &Skill) -> anyhow::Result<PathBuf> {
         write::write_standard_skill(&root.join(format!("{DIR}/skills")), skill, self)
     }
 }
 
 impl AgentsWriter for CodexParser {
-    fn name(&self) -> AgentName { AgentName::new(NAME) }
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
     fn write_agent(&self, root: &Path, agent: &Agent) -> anyhow::Result<PathBuf> {
         write::write_standard_agent(&root.join(format!("{DIR}/agents")), agent, self)
     }
 }
 
 impl Detector for CodexParser {
-    fn name(&self) -> AgentName { AgentName::new(NAME) }
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
 
     fn detect(&self, root: &Path) -> Option<DetectedAgent> {
         let skills_dir = root.join(format!("{DIR}/skills"));

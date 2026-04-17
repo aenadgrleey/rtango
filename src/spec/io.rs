@@ -26,8 +26,8 @@ pub fn lock_path(root: &Path) -> std::path::PathBuf {
 
 pub fn load_spec(root: &Path) -> anyhow::Result<Spec> {
     let path = spec_path(root);
-    let content = fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let content =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
     let spec: Spec = serde_yml::from_str(&content)
         .with_context(|| format!("failed to parse {}", path.display()))?;
     validate_spec(&spec)?;
@@ -71,8 +71,8 @@ pub fn save_spec(root: &Path, spec: &Spec) -> anyhow::Result<()> {
 
 pub fn load_lock(root: &Path) -> anyhow::Result<Lock> {
     let path = lock_path(root);
-    let content = fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let content =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
     let lock: Lock = serde_yml::from_str(&content)
         .with_context(|| format!("failed to parse {}", path.display()))?;
     Ok(lock)

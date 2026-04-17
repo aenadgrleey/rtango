@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::spec::io::{load_lock_or_empty, load_spec, save_lock};
 use crate::spec::Ownership;
+use crate::spec::io::{load_lock_or_empty, load_spec, save_lock};
 
 /// Set or clear an explicit ownership decision in `.rtango/lock.yaml`.
 ///
@@ -28,7 +28,11 @@ pub fn exec(
         }
     }
 
-    let abs = if path.is_absolute() { path } else { root.join(path) };
+    let abs = if path.is_absolute() {
+        path
+    } else {
+        root.join(path)
+    };
 
     let mut lock = load_lock_or_empty(root)?;
     lock.owners.retain(|o| o.path != abs);

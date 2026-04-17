@@ -6,9 +6,7 @@ use tempfile::TempDir;
 use rtango::cmd::sync::Prompter;
 use rtango::engine::{AmbiguousPath, find_ambiguities};
 use rtango::spec::io::{load_lock, load_lock_or_empty};
-use rtango::spec::{
-    AgentName, Defaults, Lock, Rule, RuleKind, Source, Spec,
-};
+use rtango::spec::{AgentName, Defaults, Lock, Rule, RuleKind, Source, Spec};
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -138,9 +136,8 @@ fn sync_prompts_on_set_vs_set_and_records_decision() {
         calls: vec![],
     };
 
-    let result = rtango::cmd::sync::exec_with_prompter(
-        root, false, false, None, false, &mut prompter,
-    );
+    let result =
+        rtango::cmd::sync::exec_with_prompter(root, false, false, None, false, &mut prompter);
     assert!(result.is_ok(), "sync failed: {:?}", result.err());
 
     assert_eq!(prompter.calls.len(), 2);
@@ -171,10 +168,8 @@ fn sync_errors_when_prompter_aborts() {
         calls: vec![],
     };
 
-    let err = rtango::cmd::sync::exec_with_prompter(
-        root, false, false, None, false, &mut prompter,
-    )
-    .unwrap_err();
+    let err = rtango::cmd::sync::exec_with_prompter(root, false, false, None, false, &mut prompter)
+        .unwrap_err();
     assert!(
         err.to_string().contains("ambiguous ownership"),
         "err: {}",
@@ -197,8 +192,7 @@ fn sync_does_not_prompt_when_unambiguous() {
     write_spec(root, &spec);
 
     let mut prompter = PanickingPrompter;
-    let result = rtango::cmd::sync::exec_with_prompter(
-        root, false, false, None, false, &mut prompter,
-    );
+    let result =
+        rtango::cmd::sync::exec_with_prompter(root, false, false, None, false, &mut prompter);
     assert!(result.is_ok(), "sync failed: {:?}", result.err());
 }

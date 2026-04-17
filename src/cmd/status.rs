@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::engine::{compute_plan, DeploymentStatus};
+use crate::engine::{DeploymentStatus, compute_plan};
 use crate::spec::io::{load_lock_or_empty, load_spec};
 
 pub fn exec(root: &Path, rule: Option<String>, verbose: bool) -> anyhow::Result<()> {

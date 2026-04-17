@@ -4,8 +4,8 @@ use std::path::Path;
 use crate::engine::{
     AmbiguousPath, DeploymentStatus, Plan, compute_plan, execute_plan, find_ambiguities,
 };
-use crate::spec::io::{load_lock_or_empty, load_spec, save_lock};
 use crate::spec::Ownership;
+use crate::spec::io::{load_lock_or_empty, load_spec, save_lock};
 
 /// Strategy for resolving set-vs-set ambiguity during `sync`. `None` from
 /// `choose_owner` means the user declined to pick — sync aborts with the
@@ -21,11 +21,7 @@ pub struct StdioPrompter;
 impl Prompter for StdioPrompter {
     fn choose_owner(&mut self, ambiguity: &AmbiguousPath) -> anyhow::Result<Option<String>> {
         let mut out = io::stdout().lock();
-        writeln!(
-            out,
-            "\nmultiple rules claim {}",
-            ambiguity.path.display()
-        )?;
+        writeln!(out, "\nmultiple rules claim {}", ambiguity.path.display())?;
         for (i, id) in ambiguity.candidates.iter().enumerate() {
             writeln!(out, "  [{}] {}", i + 1, id)?;
         }

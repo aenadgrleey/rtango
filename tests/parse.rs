@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use rtango::agent::permission::Permission;
-use rtango::agent::{parse_standard_agents, parse_standard_skills, CopilotParser};
+use rtango::agent::{CopilotParser, parse_standard_agents, parse_standard_skills};
 
 fn write_file(path: &Path, content: &str) {
     if let Some(parent) = path.parent() {
@@ -114,7 +114,10 @@ fn agents_from_valid_dir() {
     let agents = parse_standard_agents(&agents_dir, &CopilotParser).unwrap();
     assert_eq!(agents.len(), 1);
     assert_eq!(agents[0].name, "reviewer");
-    assert_eq!(agents[0].front_matter.description.as_deref(), Some("reviews code"));
+    assert_eq!(
+        agents[0].front_matter.description.as_deref(),
+        Some("reviews code")
+    );
     assert_eq!(
         agents[0].front_matter.allowed_tools,
         vec![Permission::Read, Permission::Edit],

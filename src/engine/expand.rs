@@ -1,7 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::agent::{self, frontmatter::{FrontMatter, FrontMatterMapper, split_frontmatter, tokenize_tools}};
+use crate::agent::{
+    self,
+    frontmatter::{FrontMatter, FrontMatterMapper, split_frontmatter, tokenize_tools},
+};
 use crate::spec::{Rule, RuleKind, Source};
 
 use super::{ExpandedItem, ExpandedKind, SystemFile, fetch_github, hash_content};
@@ -20,12 +23,28 @@ pub fn expand_rule(root: &Path, rule: &Rule) -> anyhow::Result<Vec<ExpandedItem>
         RuleKind::AgentSet { include, exclude } => {
             expand_agent_set(&project_root, rule, &abs_path, include, exclude)
         }
-        RuleKind::Skill { name, description, allowed_tools } => {
-            expand_single_skill(rule, &abs_path, name.as_deref(), description.as_deref(), allowed_tools.as_deref())
-        }
-        RuleKind::Agent { name, description, allowed_tools } => {
-            expand_single_agent(rule, &abs_path, name.as_deref(), description.as_deref(), allowed_tools.as_deref())
-        }
+        RuleKind::Skill {
+            name,
+            description,
+            allowed_tools,
+        } => expand_single_skill(
+            rule,
+            &abs_path,
+            name.as_deref(),
+            description.as_deref(),
+            allowed_tools.as_deref(),
+        ),
+        RuleKind::Agent {
+            name,
+            description,
+            allowed_tools,
+        } => expand_single_agent(
+            rule,
+            &abs_path,
+            name.as_deref(),
+            description.as_deref(),
+            allowed_tools.as_deref(),
+        ),
         RuleKind::System => expand_single_system(rule, &abs_path),
     }
 }
@@ -158,7 +177,8 @@ fn expand_single_skill(
     if !skill_file.is_file() {
         anyhow::bail!("skill file not found: {}", skill_file.display());
     }
-    let name = abs_path.file_name()
+    let name = abs_path
+        .file_name()
         .ok_or_else(|| anyhow::anyhow!("skill path has no name"))?
         .to_string_lossy()
         .into_owned();
@@ -224,10 +244,12 @@ fn expand_single_agent(
     if !abs_path.is_file() {
         anyhow::bail!("agent file not found: {}", abs_path.display());
     }
-    let file_name = abs_path.file_name()
+    let file_name = abs_path
+        .file_name()
         .ok_or_else(|| anyhow::anyhow!("agent path has no file name"))?
         .to_string_lossy();
-    let agent_name = file_name.strip_suffix(".agent.md")
+    let agent_name = file_name
+        .strip_suffix(".agent.md")
         .ok_or_else(|| anyhow::anyhow!("agent file must end with .agent.md: {}", file_name))?
         .to_owned();
     let content = fs::read_to_string(abs_path)?;

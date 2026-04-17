@@ -19,7 +19,11 @@ const USER_AGENT: &str = concat!("rtango/", env!("CARGO_PKG_VERSION"));
 pub fn fetch_github(source: &GithubSource) -> anyhow::Result<PathBuf> {
     let (owner, repo) = parse_owner_repo(&source.github)?;
     let sha = resolve_ref(owner, repo, source.r#ref.as_str())?;
-    let cache_dir = cache_root()?.join("github").join(owner).join(repo).join(&sha);
+    let cache_dir = cache_root()?
+        .join("github")
+        .join(owner)
+        .join(repo)
+        .join(&sha);
 
     if !cache_dir.exists() {
         download_and_extract(owner, repo, &sha, &cache_dir)?;
@@ -35,8 +39,8 @@ fn parse_owner_repo(slug: &str) -> anyhow::Result<(&str, &str)> {
 }
 
 fn cache_root() -> anyhow::Result<PathBuf> {
-    let base = dirs::cache_dir()
-        .ok_or_else(|| anyhow!("could not determine user cache directory"))?;
+    let base =
+        dirs::cache_dir().ok_or_else(|| anyhow!("could not determine user cache directory"))?;
     Ok(base.join("rtango"))
 }
 
@@ -80,7 +84,8 @@ fn download_and_extract(owner: &str, repo: &str, sha: &str, dest: &Path) -> anyh
         .call()
         .with_context(|| format!("failed to download {owner}/{repo}@{sha}"))?;
 
-    let parent = dest.parent()
+    let parent = dest
+        .parent()
         .ok_or_else(|| anyhow!("cache dest has no parent: {}", dest.display()))?;
     fs::create_dir_all(parent)
         .with_context(|| format!("failed to create cache dir {}", parent.display()))?;

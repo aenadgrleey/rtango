@@ -22,7 +22,9 @@ pub fn execute_plan(
 ) -> anyhow::Result<Lock> {
     // Check for unresolved conflicts
     if plan.has_conflicts() {
-        let reasons: Vec<&str> = plan.items.iter()
+        let reasons: Vec<&str> = plan
+            .items
+            .iter()
             .filter_map(|d| match &d.status {
                 DeploymentStatus::Conflict { reason } => Some(reason.as_str()),
                 _ => None,

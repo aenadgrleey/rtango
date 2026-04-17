@@ -88,17 +88,27 @@ pub fn tokenize_tools(s: &str) -> Vec<String> {
     let mut depth = 0u32;
     for ch in s.chars() {
         match ch {
-            '(' => { depth += 1; current.push(ch); }
-            ')' => { depth = depth.saturating_sub(1); current.push(ch); }
+            '(' => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+                current.push(ch);
+            }
             ' ' | '\t' if depth == 0 => {
                 let t = current.trim().to_string();
-                if !t.is_empty() { tokens.push(t); }
+                if !t.is_empty() {
+                    tokens.push(t);
+                }
                 current.clear();
             }
             _ => current.push(ch),
         }
     }
     let t = current.trim().to_string();
-    if !t.is_empty() { tokens.push(t); }
+    if !t.is_empty() {
+        tokens.push(t);
+    }
     tokens
 }

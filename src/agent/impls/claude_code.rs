@@ -11,14 +11,18 @@ use crate::spec::AgentName;
 pub struct ClaudeCodeParser;
 
 impl SkillsParser for ClaudeCodeParser {
-    fn name(&self) -> AgentName { AgentName::new("claude-code") }
+    fn name(&self) -> AgentName {
+        AgentName::new("claude-code")
+    }
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
         parse::parse_standard_skills(&root.join(".claude/skills"), self)
     }
 }
 
 impl AgentsParser for ClaudeCodeParser {
-    fn name(&self) -> AgentName { AgentName::new("claude-code") }
+    fn name(&self) -> AgentName {
+        AgentName::new("claude-code")
+    }
     fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
         parse::parse_standard_agents(&root.join(".claude/agents"), self)
     }
@@ -26,7 +30,10 @@ impl AgentsParser for ClaudeCodeParser {
 
 impl FrontMatterMapper for ClaudeCodeParser {
     fn parse_permission(&self, token: &str) -> Permission {
-        if let Some(inner) = token.strip_prefix("Bash(").and_then(|s| s.strip_suffix(')')) {
+        if let Some(inner) = token
+            .strip_prefix("Bash(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
             return Permission::Shell(Some(inner.to_string()));
         }
         match token {
@@ -80,21 +87,27 @@ impl FrontMatterWriter for ClaudeCodeParser {
 }
 
 impl SkillsWriter for ClaudeCodeParser {
-    fn name(&self) -> AgentName { AgentName::new("claude-code") }
+    fn name(&self) -> AgentName {
+        AgentName::new("claude-code")
+    }
     fn write_skill(&self, root: &Path, skill: &Skill) -> anyhow::Result<PathBuf> {
         write::write_standard_skill(&root.join(".claude/skills"), skill, self)
     }
 }
 
 impl AgentsWriter for ClaudeCodeParser {
-    fn name(&self) -> AgentName { AgentName::new("claude-code") }
+    fn name(&self) -> AgentName {
+        AgentName::new("claude-code")
+    }
     fn write_agent(&self, root: &Path, agent: &Agent) -> anyhow::Result<PathBuf> {
         write::write_standard_agent(&root.join(".claude/agents"), agent, self)
     }
 }
 
 impl Detector for ClaudeCodeParser {
-    fn name(&self) -> AgentName { AgentName::new("claude-code") }
+    fn name(&self) -> AgentName {
+        AgentName::new("claude-code")
+    }
 
     fn detect(&self, root: &Path) -> Option<DetectedAgent> {
         let skills_dir = root.join(".claude/skills");

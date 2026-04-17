@@ -50,10 +50,8 @@ mod tests {
 
     #[test]
     fn github_object_with_ref_and_path() {
-        let src: Source = serde_yml::from_str(
-            "github: owner/repo\nref: v1.0.0\npath: skills/\n",
-        )
-        .unwrap();
+        let src: Source =
+            serde_yml::from_str("github: owner/repo\nref: v1.0.0\npath: skills/\n").unwrap();
         match src {
             Source::Github(g) => {
                 assert_eq!(g.github, "owner/repo");

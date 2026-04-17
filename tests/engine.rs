@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use rtango::engine::{
-    DeploymentStatus, ExpandedKind, Plan,
-    compute_plan, execute_plan, expand_rule, hash_content, render_for_agent,
+    DeploymentStatus, ExpandedKind, Plan, compute_plan, execute_plan, expand_rule, hash_content,
+    render_for_agent,
 };
 use rtango::spec::{
     AgentName, Defaults, Deployment, Lock, OnTargetModified, Rule, RuleKind, Source, Spec,
@@ -102,10 +102,13 @@ fn expand_skill_set_finds_all_skills() {
     let items = expand_rule(root, &rule).unwrap();
 
     assert_eq!(items.len(), 2);
-    let names: Vec<&str> = items.iter().map(|i| match &i.kind {
-        ExpandedKind::Skill(s) => s.name.as_str(),
-        _ => panic!("expected skill"),
-    }).collect();
+    let names: Vec<&str> = items
+        .iter()
+        .map(|i| match &i.kind {
+            ExpandedKind::Skill(s) => s.name.as_str(),
+            _ => panic!("expected skill"),
+        })
+        .collect();
     assert!(names.contains(&"alpha"));
     assert!(names.contains(&"beta"));
 }
@@ -121,10 +124,13 @@ fn expand_agent_set_finds_all_agents() {
     let items = expand_rule(root, &rule).unwrap();
 
     assert_eq!(items.len(), 2);
-    let names: Vec<&str> = items.iter().map(|i| match &i.kind {
-        ExpandedKind::Agent(a) => a.name.as_str(),
-        _ => panic!("expected agent"),
-    }).collect();
+    let names: Vec<&str> = items
+        .iter()
+        .map(|i| match &i.kind {
+            ExpandedKind::Agent(a) => a.name.as_str(),
+            _ => panic!("expected agent"),
+        })
+        .collect();
     assert!(names.contains(&"reviewer"));
     assert!(names.contains(&"planner"));
 }
@@ -152,7 +158,11 @@ fn expand_single_skill() {
 fn expand_single_agent() {
     let tmp = TempDir::new().unwrap();
     let root = tmp.path();
-    setup_copilot_agent(root, "helper", "---\nname: Helper\n---\nDoes helpful things");
+    setup_copilot_agent(
+        root,
+        "helper",
+        "---\nname: Helper\n---\nDoes helpful things",
+    );
 
     let rule = single_agent_rule("a1", ".github/agents/helper.agent.md", "copilot");
     let items = expand_rule(root, &rule).unwrap();
@@ -187,10 +197,13 @@ fn expand_skill_set_honors_include_filter() {
     };
     let items = expand_rule(root, &rule).unwrap();
 
-    let names: Vec<&str> = items.iter().map(|i| match &i.kind {
-        ExpandedKind::Skill(s) => s.name.as_str(),
-        _ => panic!("expected skill"),
-    }).collect();
+    let names: Vec<&str> = items
+        .iter()
+        .map(|i| match &i.kind {
+            ExpandedKind::Skill(s) => s.name.as_str(),
+            _ => panic!("expected skill"),
+        })
+        .collect();
     assert_eq!(names.len(), 2);
     assert!(names.contains(&"alpha"));
     assert!(names.contains(&"gamma"));
@@ -217,10 +230,13 @@ fn expand_agent_set_honors_exclude_filter() {
     };
     let items = expand_rule(root, &rule).unwrap();
 
-    let names: Vec<&str> = items.iter().map(|i| match &i.kind {
-        ExpandedKind::Agent(a) => a.name.as_str(),
-        _ => panic!("expected agent"),
-    }).collect();
+    let names: Vec<&str> = items
+        .iter()
+        .map(|i| match &i.kind {
+            ExpandedKind::Agent(a) => a.name.as_str(),
+            _ => panic!("expected agent"),
+        })
+        .collect();
     assert_eq!(names.len(), 2);
     assert!(!names.contains(&"draft"));
 }
@@ -264,7 +280,11 @@ fn expand_single_skill_applies_overrides() {
 fn render_skill_for_claude_code() {
     let tmp = TempDir::new().unwrap();
     let root = tmp.path();
-    setup_copilot_skill(root, "deploy", "---\nname: Deploy\n---\nDeploy instructions");
+    setup_copilot_skill(
+        root,
+        "deploy",
+        "---\nname: Deploy\n---\nDeploy instructions",
+    );
 
     let rule = single_skill_rule("s1", ".github/skills/deploy", "copilot");
     let items = expand_rule(root, &rule).unwrap();
@@ -273,7 +293,10 @@ fn render_skill_for_claude_code() {
     let target = AgentName::new("claude-code");
     let rendered = render_for_agent(root, item, &AgentName::new("copilot"), &target).unwrap();
 
-    assert_eq!(rendered.target_path, PathBuf::from(".claude/skills/deploy/SKILL.md"));
+    assert_eq!(
+        rendered.target_path,
+        PathBuf::from(".claude/skills/deploy/SKILL.md")
+    );
     assert!(rendered.content.contains("Deploy instructions"));
     assert!(!rendered.content_hash.is_empty());
 }
@@ -287,7 +310,11 @@ fn render_agent_for_copilot() {
     // Set up a claude-code agent
     let agents_dir = root.join(".claude/agents");
     fs::create_dir_all(&agents_dir).unwrap();
-    fs::write(agents_dir.join("reviewer.agent.md"), "---\nname: Reviewer\n---\nReview code").unwrap();
+    fs::write(
+        agents_dir.join("reviewer.agent.md"),
+        "---\nname: Reviewer\n---\nReview code",
+    )
+    .unwrap();
 
     let rule = single_agent_rule("a1", ".claude/agents/reviewer.agent.md", "claude-code");
     let items = expand_rule(root, &rule).unwrap();
@@ -296,7 +323,10 @@ fn render_agent_for_copilot() {
     let target = AgentName::new("copilot");
     let rendered = render_for_agent(root, item, &AgentName::new("claude-code"), &target).unwrap();
 
-    assert_eq!(rendered.target_path, PathBuf::from(".github/agents/reviewer.agent.md"));
+    assert_eq!(
+        rendered.target_path,
+        PathBuf::from(".github/agents/reviewer.agent.md")
+    );
     assert!(rendered.content.contains("Review code"));
 }
 
@@ -342,7 +372,10 @@ fn plan_conflict_when_no_lock_but_target_exists() {
     let plan = compute_plan(root, &spec, &lock, false).unwrap();
 
     assert_eq!(plan.items.len(), 1);
-    assert!(matches!(plan.items[0].status, DeploymentStatus::Conflict { .. }));
+    assert!(matches!(
+        plan.items[0].status,
+        DeploymentStatus::Conflict { .. }
+    ));
 }
 
 #[test]
@@ -432,7 +465,10 @@ fn plan_conflict_when_target_modified_externally_and_policy_fail() {
 
     let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
     assert_eq!(plan2.items.len(), 1);
-    assert!(matches!(plan2.items[0].status, DeploymentStatus::Conflict { .. }));
+    assert!(matches!(
+        plan2.items[0].status,
+        DeploymentStatus::Conflict { .. }
+    ));
     assert!(plan2.has_conflicts());
 }
 
@@ -511,11 +547,16 @@ fn plan_orphan_detection() {
     fs::remove_dir_all(root.join(".github/skills/skill-b")).unwrap();
 
     let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
-    let orphans: Vec<_> = plan2.items.iter()
+    let orphans: Vec<_> = plan2
+        .items
+        .iter()
         .filter(|i| i.status == DeploymentStatus::Orphan)
         .collect();
     assert_eq!(orphans.len(), 1);
-    assert_eq!(orphans[0].target_path, PathBuf::from(".claude/skills/skill-b/SKILL.md"));
+    assert_eq!(
+        orphans[0].target_path,
+        PathBuf::from(".claude/skills/skill-b/SKILL.md")
+    );
     assert!(plan2.has_orphans());
 }
 
@@ -667,7 +708,11 @@ fn full_roundtrip_with_agents() {
     let root = tmp.path();
 
     // Set up source agents in copilot format
-    setup_copilot_agent(root, "reviewer", "---\nname: Reviewer\n---\nReview code carefully");
+    setup_copilot_agent(
+        root,
+        "reviewer",
+        "---\nname: Reviewer\n---\nReview code carefully",
+    );
 
     let spec = make_spec(
         vec!["claude-code"],
@@ -723,7 +768,11 @@ fn single_file_rule_beats_set_for_shared_path() {
     // Second sync: set would see git-helper in .github/skills but the single
     // rule owns it — no conflict, no duplicate deployment.
     let plan2 = compute_plan(root, &spec, &lock1, false).unwrap();
-    assert!(!plan2.has_conflicts(), "expected no conflicts, got {:?}", plan2.items);
+    assert!(
+        !plan2.has_conflicts(),
+        "expected no conflicts, got {:?}",
+        plan2.items
+    );
     assert!(plan2.is_clean(), "second sync should be up-to-date");
 
     // Set rule must not track git-helper.
@@ -868,7 +917,11 @@ fn reparented_target_adopts_existing_content_without_conflict() {
     let lock_v1 = execute_plan(root, &plan_v1, &empty_lock(), false).unwrap();
     assert!(root.join(".claude/skills/foo/SKILL.md").exists());
     assert_eq!(
-        lock_v1.deployments.iter().filter(|d| d.rule_id == "single").count(),
+        lock_v1
+            .deployments
+            .iter()
+            .filter(|d| d.rule_id == "single")
+            .count(),
         1
     );
 
@@ -887,7 +940,9 @@ fn reparented_target_adopts_existing_content_without_conflict() {
     let set_item = plan_v2
         .items
         .iter()
-        .find(|i| i.rule_id == "set" && i.target_path == PathBuf::from(".claude/skills/foo/SKILL.md"))
+        .find(|i| {
+            i.rule_id == "set" && i.target_path == PathBuf::from(".claude/skills/foo/SKILL.md")
+        })
         .expect("expected a set-rule deployment for foo");
     assert_eq!(
         set_item.status,
@@ -932,7 +987,9 @@ fn reparented_target_with_modified_source_is_updated() {
     let set_item = plan_v2
         .items
         .iter()
-        .find(|i| i.rule_id == "set" && i.target_path == PathBuf::from(".claude/skills/foo/SKILL.md"))
+        .find(|i| {
+            i.rule_id == "set" && i.target_path == PathBuf::from(".claude/skills/foo/SKILL.md")
+        })
         .unwrap();
     assert_eq!(set_item.status, DeploymentStatus::Update);
 }

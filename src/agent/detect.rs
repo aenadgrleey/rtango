@@ -53,10 +53,5 @@ pub fn dir_has_standard_agents(dir: &Path) -> bool {
     };
     entries
         .filter_map(|e| e.ok())
-        .any(|e| {
-            e.path().is_file()
-                && e.file_name()
-                    .to_string_lossy()
-                    .ends_with(".agent.md")
-        })
+        .any(|e| e.path().is_file() && e.file_name().to_string_lossy().ends_with(".agent.md"))
 }

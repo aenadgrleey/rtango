@@ -4,9 +4,7 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 use rtango::spec::io::{load_lock, load_lock_or_empty, save_lock};
-use rtango::spec::{
-    AgentName, Defaults, Lock, Ownership, Rule, RuleKind, Source, Spec,
-};
+use rtango::spec::{AgentName, Defaults, Lock, Ownership, Rule, RuleKind, Source, Spec};
 
 fn write_spec(root: &Path, spec: &Spec) {
     fs::create_dir_all(root.join(".rtango")).unwrap();
@@ -60,11 +58,7 @@ fn own_rejects_unknown_rule() {
     let target = root.join(".github/skills/foo/SKILL.md");
     let err =
         rtango::cmd::own::exec(root, target, Some("does-not-exist".into()), false).unwrap_err();
-    assert!(
-        err.to_string().contains("does-not-exist"),
-        "err: {}",
-        err
-    );
+    assert!(err.to_string().contains("does-not-exist"), "err: {}", err);
 }
 
 #[test]

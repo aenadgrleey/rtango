@@ -78,12 +78,18 @@ fn join_split_roundtrip() {
 
 #[test]
 fn tokenize_simple() {
-    assert_eq!(tokenize_tools("Read Write Edit"), vec!["Read", "Write", "Edit"]);
+    assert_eq!(
+        tokenize_tools("Read Write Edit"),
+        vec!["Read", "Write", "Edit"]
+    );
 }
 
 #[test]
 fn tokenize_with_parens() {
-    assert_eq!(tokenize_tools("Bash(npm*) Read"), vec!["Bash(npm*)", "Read"]);
+    assert_eq!(
+        tokenize_tools("Bash(npm*) Read"),
+        vec!["Bash(npm*)", "Read"]
+    );
 }
 
 #[test]

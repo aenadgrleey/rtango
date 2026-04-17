@@ -1,6 +1,6 @@
+use rtango::agent::CopilotParser;
 use rtango::agent::frontmatter::FrontMatterMapper;
 use rtango::agent::permission::Permission;
-use rtango::agent::CopilotParser;
 
 fn parser() -> CopilotParser {
     CopilotParser

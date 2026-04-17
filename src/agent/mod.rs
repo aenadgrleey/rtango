@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-pub use impls::*;
 pub use detect::{DetectedAgent, DetectedSource, Detector, SourceKind};
 pub use frontmatter::{FrontMatter, FrontMatterMapper};
+pub use impls::*;
 pub use parse::*;
 pub use permission::Permission;
 pub use write::*;
@@ -31,7 +31,16 @@ fn all_parsers() -> Vec<Box<dyn AgentParser>> {
 
 /// Blanket trait combining all per-agent capabilities.
 /// Every agent parser struct implements this via the individual traits.
-pub trait AgentParser: SkillsParser + AgentsParser + FrontMatterMapper + FrontMatterWriter + SkillsWriter + AgentsWriter + Detector {}
+pub trait AgentParser:
+    SkillsParser
+    + AgentsParser
+    + FrontMatterMapper
+    + FrontMatterWriter
+    + SkillsWriter
+    + AgentsWriter
+    + Detector
+{
+}
 impl AgentParser for CopilotParser {}
 impl AgentParser for ClaudeCodeParser {}
 impl AgentParser for CodexParser {}

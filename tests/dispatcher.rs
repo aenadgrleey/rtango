@@ -6,7 +6,10 @@ const KNOWN_AGENTS: &[&str] = &["copilot", "claude-code", "codex", "pi", "openco
 #[test]
 fn skills_parser_known() {
     for name in KNOWN_AGENTS {
-        assert!(skills_parser(&AgentName::new(*name)).is_some(), "missing skills_parser for {name}");
+        assert!(
+            skills_parser(&AgentName::new(*name)).is_some(),
+            "missing skills_parser for {name}"
+        );
     }
 }
 
@@ -18,7 +21,10 @@ fn skills_parser_unknown() {
 #[test]
 fn agents_parser_known() {
     for name in KNOWN_AGENTS {
-        assert!(agents_parser(&AgentName::new(*name)).is_some(), "missing agents_parser for {name}");
+        assert!(
+            agents_parser(&AgentName::new(*name)).is_some(),
+            "missing agents_parser for {name}"
+        );
     }
 }
 
@@ -30,7 +36,10 @@ fn agents_parser_unknown() {
 #[test]
 fn frontmatter_mapper_known() {
     for name in KNOWN_AGENTS {
-        assert!(frontmatter_mapper(&AgentName::new(*name)).is_some(), "missing frontmatter_mapper for {name}");
+        assert!(
+            frontmatter_mapper(&AgentName::new(*name)).is_some(),
+            "missing frontmatter_mapper for {name}"
+        );
     }
 }
 

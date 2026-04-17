@@ -97,16 +97,30 @@ pub enum RuleKind {
 
 impl RuleKind {
     pub fn skill() -> Self {
-        RuleKind::Skill { name: None, description: None, allowed_tools: None }
+        RuleKind::Skill {
+            name: None,
+            description: None,
+            allowed_tools: None,
+        }
     }
     pub fn skill_set() -> Self {
-        RuleKind::SkillSet { include: Vec::new(), exclude: Vec::new() }
+        RuleKind::SkillSet {
+            include: Vec::new(),
+            exclude: Vec::new(),
+        }
     }
     pub fn agent() -> Self {
-        RuleKind::Agent { name: None, description: None, allowed_tools: None }
+        RuleKind::Agent {
+            name: None,
+            description: None,
+            allowed_tools: None,
+        }
     }
     pub fn agent_set() -> Self {
-        RuleKind::AgentSet { include: Vec::new(), exclude: Vec::new() }
+        RuleKind::AgentSet {
+            include: Vec::new(),
+            exclude: Vec::new(),
+        }
     }
     pub fn system() -> Self {
         RuleKind::System

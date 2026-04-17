@@ -8,7 +8,11 @@ pub mod wander;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "rtango", version, about = "Package manager for agent skills and configuration files")]
+#[command(
+    name = "rtango",
+    version,
+    about = "Package manager for agent skills and configuration files"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -83,11 +87,21 @@ pub enum Command {
         id: String,
 
         /// Local source path (directory or file, relative to root)
-        #[arg(short = 'l', long = "local", value_name = "PATH", conflicts_with = "repo")]
+        #[arg(
+            short = 'l',
+            long = "local",
+            value_name = "PATH",
+            conflicts_with = "repo"
+        )]
         local: Option<std::path::PathBuf>,
 
         /// GitHub source: owner/repo[@ref][:path]
-        #[arg(short = 'r', long = "repo", value_name = "SPEC", conflicts_with = "local")]
+        #[arg(
+            short = 'r',
+            long = "repo",
+            value_name = "SPEC",
+            conflicts_with = "local"
+        )]
         repo: Option<String>,
 
         /// Kind is a single skill
@@ -180,10 +194,19 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     match cli.command {
         Command::Init { force, no_detect } => init::exec(&root, force, no_detect),
-        Command::Sync { check, force, rule, adopt } => sync::exec(&root, check, force, rule, adopt),
+        Command::Sync {
+            check,
+            force,
+            rule,
+            adopt,
+        } => sync::exec(&root, check, force, rule, adopt),
         Command::Status { rule, verbose } => status::exec(&root, rule, verbose),
         Command::Wander { targets } => wander::exec(&root, targets),
-        Command::Own { path, rule_id, clear } => own::exec(&root, path, rule_id, clear),
+        Command::Own {
+            path,
+            rule_id,
+            clear,
+        } => own::exec(&root, path, rule_id, clear),
         Command::Add {
             id,
             local,

@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::bail;
 
 use crate::agent::{self, SourceKind};
-use crate::engine::{compute_plan, execute_plan, DeploymentStatus};
+use crate::engine::{DeploymentStatus, compute_plan, execute_plan};
 use crate::error::RtangoError;
 use crate::spec::{AgentName, Defaults, Lock, Rule, RuleKind, Source, Spec};
 

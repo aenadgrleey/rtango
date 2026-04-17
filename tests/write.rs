@@ -5,7 +5,7 @@ use std::path::Path;
 use rtango::agent::frontmatter::{FrontMatter, FrontMatterMapper, split_frontmatter};
 use rtango::agent::permission::Permission;
 use rtango::agent::write::{
-    write_standard_agent, write_standard_skill, AgentsWriter, FrontMatterWriter, SkillsWriter,
+    AgentsWriter, FrontMatterWriter, SkillsWriter, write_standard_agent, write_standard_skill,
 };
 use rtango::agent::{Agent, ClaudeCodeParser, CopilotParser, Skill};
 
@@ -15,14 +15,29 @@ use rtango::agent::{Agent, ClaudeCodeParser, CopilotParser, Skill};
 fn copilot_format_known_permissions() {
     let w = CopilotParser;
     assert_eq!(w.format_permission(&Permission::Read), Some("read".into()));
-    assert_eq!(w.format_permission(&Permission::Write), Some("write".into()));
+    assert_eq!(
+        w.format_permission(&Permission::Write),
+        Some("write".into())
+    );
     assert_eq!(w.format_permission(&Permission::Edit), Some("edit".into()));
-    assert_eq!(w.format_permission(&Permission::Shell(None)), Some("shell".into()));
-    assert_eq!(w.format_permission(&Permission::Shell(Some("npm *".into()))), Some("shell".into()));
+    assert_eq!(
+        w.format_permission(&Permission::Shell(None)),
+        Some("shell".into())
+    );
+    assert_eq!(
+        w.format_permission(&Permission::Shell(Some("npm *".into()))),
+        Some("shell".into())
+    );
     assert_eq!(w.format_permission(&Permission::Grep), Some("grep".into()));
     assert_eq!(w.format_permission(&Permission::Glob), Some("glob".into()));
-    assert_eq!(w.format_permission(&Permission::WebFetch), Some("web_fetch".into()));
-    assert_eq!(w.format_permission(&Permission::WebSearch), Some("web_search".into()));
+    assert_eq!(
+        w.format_permission(&Permission::WebFetch),
+        Some("web_fetch".into())
+    );
+    assert_eq!(
+        w.format_permission(&Permission::WebSearch),
+        Some("web_search".into())
+    );
 }
 
 #[test]
@@ -100,14 +115,20 @@ fn copilot_format_frontmatter_filters_unmappable_tools() {
     let yaml = w.format_frontmatter(&fm);
     let parsed = w.parse_frontmatter(&yaml).unwrap();
     // NotebookEdit should be dropped
-    assert_eq!(parsed.allowed_tools, vec![Permission::Read, Permission::Grep]);
+    assert_eq!(
+        parsed.allowed_tools,
+        vec![Permission::Read, Permission::Grep]
+    );
 }
 
 #[test]
 fn copilot_format_frontmatter_preserves_extra() {
     let w = CopilotParser;
     let mut extra = BTreeMap::new();
-    extra.insert("custom_key".into(), serde_yml::Value::String("value".into()));
+    extra.insert(
+        "custom_key".into(),
+        serde_yml::Value::String("value".into()),
+    );
     let fm = FrontMatter {
         name: Some("s".into()),
         description: None,
@@ -133,21 +154,45 @@ fn copilot_format_empty_frontmatter() {
 fn claude_code_format_known_permissions() {
     let w = ClaudeCodeParser;
     assert_eq!(w.format_permission(&Permission::Read), Some("Read".into()));
-    assert_eq!(w.format_permission(&Permission::Write), Some("Write".into()));
+    assert_eq!(
+        w.format_permission(&Permission::Write),
+        Some("Write".into())
+    );
     assert_eq!(w.format_permission(&Permission::Edit), Some("Edit".into()));
-    assert_eq!(w.format_permission(&Permission::Shell(None)), Some("Bash".into()));
+    assert_eq!(
+        w.format_permission(&Permission::Shell(None)),
+        Some("Bash".into())
+    );
     assert_eq!(
         w.format_permission(&Permission::Shell(Some("npm *".into()))),
         Some("Bash(npm *)".into()),
     );
     assert_eq!(w.format_permission(&Permission::Grep), Some("Grep".into()));
     assert_eq!(w.format_permission(&Permission::Glob), Some("Glob".into()));
-    assert_eq!(w.format_permission(&Permission::WebFetch), Some("WebFetch".into()));
-    assert_eq!(w.format_permission(&Permission::WebSearch), Some("WebSearch".into()));
-    assert_eq!(w.format_permission(&Permission::NotebookRead), Some("NotebookRead".into()));
-    assert_eq!(w.format_permission(&Permission::NotebookEdit), Some("NotebookEdit".into()));
-    assert_eq!(w.format_permission(&Permission::TodoRead), Some("TodoRead".into()));
-    assert_eq!(w.format_permission(&Permission::TodoWrite), Some("TodoWrite".into()));
+    assert_eq!(
+        w.format_permission(&Permission::WebFetch),
+        Some("WebFetch".into())
+    );
+    assert_eq!(
+        w.format_permission(&Permission::WebSearch),
+        Some("WebSearch".into())
+    );
+    assert_eq!(
+        w.format_permission(&Permission::NotebookRead),
+        Some("NotebookRead".into())
+    );
+    assert_eq!(
+        w.format_permission(&Permission::NotebookEdit),
+        Some("NotebookEdit".into())
+    );
+    assert_eq!(
+        w.format_permission(&Permission::TodoRead),
+        Some("TodoRead".into())
+    );
+    assert_eq!(
+        w.format_permission(&Permission::TodoWrite),
+        Some("TodoWrite".into())
+    );
     assert_eq!(w.format_permission(&Permission::ListDir), Some("LS".into()));
 }
 
@@ -320,7 +365,11 @@ fn write_skill_overwrites_existing() {
 fn write_agent_creates_correct_layout() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join("agents");
-    let agent = make_agent("reviewer", "You review code.\n", vec![Permission::Read, Permission::Edit]);
+    let agent = make_agent(
+        "reviewer",
+        "You review code.\n",
+        vec![Permission::Read, Permission::Edit],
+    );
     let path = write_standard_agent(&dir, &agent, &CopilotParser).unwrap();
 
     assert_eq!(path, dir.join("reviewer.agent.md"));

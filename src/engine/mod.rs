@@ -1,12 +1,12 @@
+mod execute;
 mod expand;
 mod fetch;
 mod plan;
-mod execute;
 
+pub use execute::*;
 pub use expand::*;
 pub use fetch::*;
 pub use plan::*;
-pub use execute::*;
 
 use std::path::PathBuf;
 
@@ -53,15 +53,21 @@ pub struct Plan {
 
 impl Plan {
     pub fn is_clean(&self) -> bool {
-        self.items.iter().all(|d| d.status == DeploymentStatus::UpToDate)
+        self.items
+            .iter()
+            .all(|d| d.status == DeploymentStatus::UpToDate)
     }
 
     pub fn has_conflicts(&self) -> bool {
-        self.items.iter().any(|d| matches!(d.status, DeploymentStatus::Conflict { .. }))
+        self.items
+            .iter()
+            .any(|d| matches!(d.status, DeploymentStatus::Conflict { .. }))
     }
 
     pub fn has_orphans(&self) -> bool {
-        self.items.iter().any(|d| d.status == DeploymentStatus::Orphan)
+        self.items
+            .iter()
+            .any(|d| d.status == DeploymentStatus::Orphan)
     }
 }
 

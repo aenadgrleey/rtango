@@ -1,6 +1,6 @@
+use rtango::agent::OpenCodeParser;
 use rtango::agent::frontmatter::FrontMatterMapper;
 use rtango::agent::permission::Permission;
-use rtango::agent::OpenCodeParser;
 
 fn parser() -> OpenCodeParser {
     OpenCodeParser

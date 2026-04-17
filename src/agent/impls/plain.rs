@@ -13,14 +13,18 @@ const NAME: &str = "plain";
 pub struct PlainParser;
 
 impl SkillsParser for PlainParser {
-    fn name(&self) -> AgentName { AgentName::new(NAME) }
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
         parse::parse_standard_skills(&root.join("skills"), self)
     }
 }
 
 impl AgentsParser for PlainParser {
-    fn name(&self) -> AgentName { AgentName::new(NAME) }
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
     fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
         parse::parse_standard_agents(&root.join("agents"), self)
     }
@@ -28,7 +32,10 @@ impl AgentsParser for PlainParser {
 
 impl FrontMatterMapper for PlainParser {
     fn parse_permission(&self, token: &str) -> Permission {
-        if let Some(inner) = token.strip_prefix("Shell(").and_then(|s| s.strip_suffix(')')) {
+        if let Some(inner) = token
+            .strip_prefix("Shell(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
             return Permission::Shell(Some(inner.to_string()));
         }
         match token {
@@ -82,21 +89,27 @@ impl FrontMatterWriter for PlainParser {
 }
 
 impl SkillsWriter for PlainParser {
-    fn name(&self) -> AgentName { AgentName::new(NAME) }
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
     fn write_skill(&self, root: &Path, skill: &Skill) -> anyhow::Result<PathBuf> {
         write::write_standard_skill(&root.join("skills"), skill, self)
     }
 }
 
 impl AgentsWriter for PlainParser {
-    fn name(&self) -> AgentName { AgentName::new(NAME) }
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
     fn write_agent(&self, root: &Path, agent: &Agent) -> anyhow::Result<PathBuf> {
         write::write_standard_agent(&root.join("agents"), agent, self)
     }
 }
 
 impl Detector for PlainParser {
-    fn name(&self) -> AgentName { AgentName::new(NAME) }
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
 
     fn detect(&self, root: &Path) -> Option<DetectedAgent> {
         let skills_dir = root.join("skills");

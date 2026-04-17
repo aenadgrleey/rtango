@@ -36,7 +36,13 @@ pub fn exec(root: &Path, opts: AddOptions) -> anyhow::Result<()> {
         (None, None) => anyhow::bail!("source required: pass --local/-l PATH or --repo/-r SPEC"),
     };
 
-    let kind = match (opts.skill, opts.agent, opts.skill_set, opts.agent_set, opts.system) {
+    let kind = match (
+        opts.skill,
+        opts.agent,
+        opts.skill_set,
+        opts.agent_set,
+        opts.system,
+    ) {
         (true, false, false, false, false) => RuleKind::Skill {
             name: opts.name,
             description: opts.description,
@@ -110,9 +116,16 @@ fn parse_repo_spec(s: &str) -> anyhow::Result<GithubSource> {
         None => (head.to_string(), "main".to_string()),
     };
     if github.is_empty() || !github.contains('/') {
-        anyhow::bail!("invalid repo spec '{}': expected owner/repo[@ref][:path]", s);
+        anyhow::bail!(
+            "invalid repo spec '{}': expected owner/repo[@ref][:path]",
+            s
+        );
     }
-    Ok(GithubSource { github, r#ref, path })
+    Ok(GithubSource {
+        github,
+        r#ref,
+        path,
+    })
 }
 
 #[cfg(test)]

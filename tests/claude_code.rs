@@ -1,6 +1,6 @@
+use rtango::agent::ClaudeCodeParser;
 use rtango::agent::frontmatter::FrontMatterMapper;
 use rtango::agent::permission::Permission;
-use rtango::agent::ClaudeCodeParser;
 
 fn parser() -> ClaudeCodeParser {
     ClaudeCodeParser
@@ -55,15 +55,19 @@ fn unknown_permission() {
 
 #[test]
 fn parse_full_frontmatter() {
-    let yaml = "name: code-review\ndescription: reviews code\nallowed-tools: Read Bash(npm*) Grep\n";
+    let yaml =
+        "name: code-review\ndescription: reviews code\nallowed-tools: Read Bash(npm*) Grep\n";
     let fm = parser().parse_frontmatter(yaml).unwrap();
     assert_eq!(fm.name.as_deref(), Some("code-review"));
     assert_eq!(fm.description.as_deref(), Some("reviews code"));
-    assert_eq!(fm.allowed_tools, vec![
-        Permission::Read,
-        Permission::Shell(Some("npm*".into())),
-        Permission::Grep,
-    ]);
+    assert_eq!(
+        fm.allowed_tools,
+        vec![
+            Permission::Read,
+            Permission::Shell(Some("npm*".into())),
+            Permission::Grep,
+        ]
+    );
 }
 
 #[test]

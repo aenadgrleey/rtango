@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use tempfile::TempDir;
 
-use rtango::engine::{compute_plan, execute_plan, DeploymentStatus};
+use rtango::engine::{DeploymentStatus, compute_plan, execute_plan};
 use rtango::spec::{
     AgentName, Defaults, Deployment, Lock, OnTargetModified, Rule, RuleKind, Source, Spec,
 };
@@ -97,7 +97,11 @@ fn status_with_creates() {
 
     let plan = compute_plan(root, &spec, &lock, false).unwrap();
     assert_eq!(plan.items.len(), 2);
-    assert!(plan.items.iter().all(|i| i.status == DeploymentStatus::Create));
+    assert!(
+        plan.items
+            .iter()
+            .all(|i| i.status == DeploymentStatus::Create)
+    );
 
     // Verify exec works
     write_spec_and_lock(root, &spec, &lock);

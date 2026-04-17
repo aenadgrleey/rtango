@@ -6,8 +6,8 @@ use crate::agent::{self, frontmatter::join_frontmatter};
 use crate::spec::{AgentName, Deployment, Lock, OnTargetModified, Ownership, RuleKind, Spec};
 
 use super::{
-    DeploymentStatus, ExpandedItem, ExpandedKind, Plan, PlannedDeployment,
-    RenderedTarget, effective_policy, expand_rule, hash_content,
+    DeploymentStatus, ExpandedItem, ExpandedKind, Plan, PlannedDeployment, RenderedTarget,
+    effective_policy, expand_rule, hash_content,
 };
 
 /// Compute the target path for a rendered item based on the target agent.
@@ -24,7 +24,11 @@ fn target_path_for(agent: &AgentName, kind: &ExpandedKind) -> anyhow::Result<Pat
         "plain" => "",
         other => anyhow::bail!("unknown target agent: {}", other),
     };
-    let prefix = if dir.is_empty() { String::new() } else { format!("{dir}/") };
+    let prefix = if dir.is_empty() {
+        String::new()
+    } else {
+        format!("{dir}/")
+    };
     match kind {
         ExpandedKind::Skill(s) => Ok(PathBuf::from(format!("{prefix}skills/{}/SKILL.md", s.name))),
         ExpandedKind::Agent(a) => Ok(PathBuf::from(format!("{prefix}agents/{}.agent.md", a.name))),
@@ -92,9 +96,9 @@ fn find_lock_entry<'a>(
     agent: &AgentName,
     target_path: &Path,
 ) -> Option<&'a Deployment> {
-    lock.deployments.iter().find(|d| {
-        d.rule_id == rule_id && d.agent == *agent && d.content == target_path
-    })
+    lock.deployments
+        .iter()
+        .find(|d| d.rule_id == rule_id && d.agent == *agent && d.content == target_path)
 }
 
 /// Find any lock deployment for (agent, target_path), regardless of rule_id.
@@ -113,12 +117,7 @@ fn find_reparent_candidate<'a>(
 }
 
 /// Compute the full sync plan.
-pub fn compute_plan(
-    root: &Path,
-    spec: &Spec,
-    lock: &Lock,
-    force: bool,
-) -> anyhow::Result<Plan> {
+pub fn compute_plan(root: &Path, spec: &Spec, lock: &Lock, force: bool) -> anyhow::Result<Plan> {
     let default_policy = spec.defaults.on_target_modified;
     let mut items = Vec::new();
 
@@ -193,22 +192,29 @@ pub fn compute_plan(
                 let disk_hash = disk_content.as_deref().map(hash_content);
 
                 // Normal lookup: lock entry for *this* rule.
-                let direct = find_lock_entry(lock, &rendered.rule_id, &rendered.agent, &rendered.target_path);
+                let direct = find_lock_entry(
+                    lock,
+                    &rendered.rule_id,
+                    &rendered.agent,
+                    &rendered.target_path,
+                );
                 // Reparent adoption: if no direct entry but another rule has a
                 // lock entry for the same (agent, target_path) and the on-disk
                 // file still matches its content_hash, forward that entry so
                 // the target is adopted rather than flagged as a conflict.
                 let adopted: Option<Deployment> = match (direct, disk_hash.as_deref()) {
-                    (None, Some(dh)) => find_reparent_candidate(lock, &rendered.agent, &rendered.target_path)
-                        .filter(|cand| cand.content_hash == dh)
-                        .map(|cand| Deployment {
-                            rule_id: rendered.rule_id.clone(),
-                            agent: cand.agent.clone(),
-                            source: cand.source.clone(),
-                            source_hash: cand.source_hash.clone(),
-                            content: cand.content.clone(),
-                            content_hash: cand.content_hash.clone(),
-                        }),
+                    (None, Some(dh)) => {
+                        find_reparent_candidate(lock, &rendered.agent, &rendered.target_path)
+                            .filter(|cand| cand.content_hash == dh)
+                            .map(|cand| Deployment {
+                                rule_id: rendered.rule_id.clone(),
+                                agent: cand.agent.clone(),
+                                source: cand.source.clone(),
+                                source_hash: cand.source_hash.clone(),
+                                content: cand.content.clone(),
+                                content_hash: cand.content_hash.clone(),
+                            })
+                    }
                     _ => None,
                 };
                 let lock_entry = direct.or(adopted.as_ref());
@@ -241,7 +247,11 @@ pub fn compute_plan(
     // to a different rule (e.g. a set rule's old entry for a file that a
     // single-file rule now owns).
     for dep in &lock.deployments {
-        let key = (dep.rule_id.clone(), dep.agent.0.clone(), dep.content.clone());
+        let key = (
+            dep.rule_id.clone(),
+            dep.agent.0.clone(),
+            dep.content.clone(),
+        );
         if seen.contains(&key) {
             continue;
         }
@@ -305,10 +315,14 @@ fn resolve_one(
     // Heuristic: a single-file rule is strictly more specific than a set.
     let singles: Vec<&String> = claimants
         .iter()
-        .filter(|r| matches!(
-            rule_kinds.get(r.as_str()),
-            Some(RuleKind::Skill { .. }) | Some(RuleKind::Agent { .. }) | Some(RuleKind::System)
-        ))
+        .filter(|r| {
+            matches!(
+                rule_kinds.get(r.as_str()),
+                Some(RuleKind::Skill { .. })
+                    | Some(RuleKind::Agent { .. })
+                    | Some(RuleKind::System)
+            )
+        })
         .collect();
     match singles.len() {
         0 => {}
@@ -380,7 +394,10 @@ fn collect_candidates(
                 ExpandedKind::Agent(a) => a.file.clone(),
                 ExpandedKind::System(s) => s.file.clone(),
             };
-            candidates.entry(source_file).or_default().insert(rule.id.clone());
+            candidates
+                .entry(source_file)
+                .or_default()
+                .insert(rule.id.clone());
             for target_agent in &spec.agents {
                 let tp = root.join(target_path_for(target_agent, &item.kind)?);
                 candidates.entry(tp).or_default().insert(rule.id.clone());

@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 use rtango::engine::hash_content;
+use rtango::spec::io::{load_lock, save_lock};
 use rtango::spec::{
     AgentName, Defaults, Deployment, Lock, OnTargetModified, Rule, RuleKind, Source, Spec,
 };
-use rtango::spec::io::{load_lock, save_lock};
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -137,7 +137,11 @@ fn check_mode_returns_ok_when_already_synced() {
 
     // Now check mode should succeed
     let result = rtango::cmd::sync::exec(root, true, false, None, false);
-    assert!(result.is_ok(), "check mode failed when synced: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "check mode failed when synced: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -232,11 +236,19 @@ fn system_file_syncs_per_agent_convention_paths() {
 
     // Source is a single markdown file with no frontmatter.
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::write(root.join("docs/INSTRUCTIONS.md"), "# House rules\n\nBe terse.\n").unwrap();
+    fs::write(
+        root.join("docs/INSTRUCTIONS.md"),
+        "# House rules\n\nBe terse.\n",
+    )
+    .unwrap();
 
     let spec = make_spec(
         vec!["claude-code", "codex", "copilot"],
-        vec![system_rule("instructions", "docs/INSTRUCTIONS.md", "claude-code")],
+        vec![system_rule(
+            "instructions",
+            "docs/INSTRUCTIONS.md",
+            "claude-code",
+        )],
     );
     write_spec(root, &spec);
 

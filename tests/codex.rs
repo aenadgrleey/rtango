@@ -1,6 +1,6 @@
+use rtango::agent::CodexParser;
 use rtango::agent::frontmatter::FrontMatterMapper;
 use rtango::agent::permission::Permission;
-use rtango::agent::CodexParser;
 
 fn parser() -> CodexParser {
     CodexParser

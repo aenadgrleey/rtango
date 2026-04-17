@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use rtango::agent::{detect_agents, DetectedSource, SourceKind};
+use rtango::agent::{DetectedSource, SourceKind, detect_agents};
 use rtango::spec::{AgentName, RuleKind};
 
 fn write_file(path: &Path, content: &str) {
@@ -31,10 +31,12 @@ fn detect_claude_code_by_skills_dir() {
     let agents = detect_agents(tmp.path());
     assert_eq!(agents.len(), 1);
     assert_eq!(agents[0].name, AgentName::new("claude-code"));
-    assert!(agents[0]
-        .sources
-        .iter()
-        .any(|s| s.kind == SourceKind::SkillSet));
+    assert!(
+        agents[0]
+            .sources
+            .iter()
+            .any(|s| s.kind == SourceKind::SkillSet)
+    );
 }
 
 #[test]
@@ -48,10 +50,12 @@ fn detect_claude_code_by_agents_dir() {
     let agents = detect_agents(tmp.path());
     assert_eq!(agents.len(), 1);
     assert_eq!(agents[0].name, AgentName::new("claude-code"));
-    assert!(agents[0]
-        .sources
-        .iter()
-        .any(|s| s.kind == SourceKind::AgentSet));
+    assert!(
+        agents[0]
+            .sources
+            .iter()
+            .any(|s| s.kind == SourceKind::AgentSet)
+    );
 }
 
 #[test]
@@ -65,10 +69,12 @@ fn detect_copilot_by_skills_dir() {
     let agents = detect_agents(tmp.path());
     assert_eq!(agents.len(), 1);
     assert_eq!(agents[0].name, AgentName::new("copilot"));
-    assert!(agents[0]
-        .sources
-        .iter()
-        .any(|s| s.kind == SourceKind::SkillSet));
+    assert!(
+        agents[0]
+            .sources
+            .iter()
+            .any(|s| s.kind == SourceKind::SkillSet)
+    );
 }
 
 #[test]
@@ -82,10 +88,12 @@ fn detect_copilot_by_agents_dir() {
     let agents = detect_agents(tmp.path());
     assert_eq!(agents.len(), 1);
     assert_eq!(agents[0].name, AgentName::new("copilot"));
-    assert!(agents[0]
-        .sources
-        .iter()
-        .any(|s| s.kind == SourceKind::AgentSet));
+    assert!(
+        agents[0]
+            .sources
+            .iter()
+            .any(|s| s.kind == SourceKind::AgentSet)
+    );
 }
 
 #[test]
@@ -236,7 +244,10 @@ mod exec {
             &tmp.path().join(".claude/skills/foo/SKILL.md"),
             "---\nname: foo\n---\n",
         );
-        write_file(&tmp.path().join(".rtango/spec.yaml"), "version: 1\nagents: []\n");
+        write_file(
+            &tmp.path().join(".rtango/spec.yaml"),
+            "version: 1\nagents: []\n",
+        );
 
         let result = init::exec(tmp.path(), false, false);
         assert!(result.is_err());
@@ -251,7 +262,10 @@ mod exec {
             &tmp.path().join(".claude/skills/foo/SKILL.md"),
             "---\nname: foo\n---\n",
         );
-        write_file(&tmp.path().join(".rtango/spec.yaml"), "version: 1\nagents: []\n");
+        write_file(
+            &tmp.path().join(".rtango/spec.yaml"),
+            "version: 1\nagents: []\n",
+        );
 
         init::exec(tmp.path(), true, false).unwrap();
 

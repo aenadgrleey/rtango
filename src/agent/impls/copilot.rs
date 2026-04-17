@@ -11,14 +11,18 @@ use crate::spec::AgentName;
 pub struct CopilotParser;
 
 impl SkillsParser for CopilotParser {
-    fn name(&self) -> AgentName { AgentName::new("copilot") }
+    fn name(&self) -> AgentName {
+        AgentName::new("copilot")
+    }
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
         parse::parse_standard_skills(&root.join(".github/skills"), self)
     }
 }
 
 impl AgentsParser for CopilotParser {
-    fn name(&self) -> AgentName { AgentName::new("copilot") }
+    fn name(&self) -> AgentName {
+        AgentName::new("copilot")
+    }
     fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
         parse::parse_standard_agents(&root.join(".github/agents"), self)
     }
@@ -70,21 +74,27 @@ impl FrontMatterWriter for CopilotParser {
 }
 
 impl SkillsWriter for CopilotParser {
-    fn name(&self) -> AgentName { AgentName::new("copilot") }
+    fn name(&self) -> AgentName {
+        AgentName::new("copilot")
+    }
     fn write_skill(&self, root: &Path, skill: &Skill) -> anyhow::Result<PathBuf> {
         write::write_standard_skill(&root.join(".github/skills"), skill, self)
     }
 }
 
 impl AgentsWriter for CopilotParser {
-    fn name(&self) -> AgentName { AgentName::new("copilot") }
+    fn name(&self) -> AgentName {
+        AgentName::new("copilot")
+    }
     fn write_agent(&self, root: &Path, agent: &Agent) -> anyhow::Result<PathBuf> {
         write::write_standard_agent(&root.join(".github/agents"), agent, self)
     }
 }
 
 impl Detector for CopilotParser {
-    fn name(&self) -> AgentName { AgentName::new("copilot") }
+    fn name(&self) -> AgentName {
+        AgentName::new("copilot")
+    }
 
     fn detect(&self, root: &Path) -> Option<DetectedAgent> {
         let skills_dir = root.join(".github/skills");

@@ -173,8 +173,8 @@ fn add_rejects_duplicate_id() {
     let tmp = TempDir::new().unwrap();
     write_spec(tmp.path(), &seeded_spec());
 
-    let err = rtango::cmd::add::exec(tmp.path(), local_skill_set_opts("existing", "other/"))
-        .unwrap_err();
+    let err =
+        rtango::cmd::add::exec(tmp.path(), local_skill_set_opts("existing", "other/")).unwrap_err();
     assert!(err.to_string().contains("already exists"), "err: {}", err);
 }
 
@@ -183,8 +183,7 @@ fn add_requires_agent_when_spec_has_multiple() {
     let tmp = TempDir::new().unwrap();
     write_spec(tmp.path(), &empty_spec(&["claude-code", "copilot"]));
 
-    let err = rtango::cmd::add::exec(tmp.path(), local_skill_set_opts("x", "skills/"))
-        .unwrap_err();
+    let err = rtango::cmd::add::exec(tmp.path(), local_skill_set_opts("x", "skills/")).unwrap_err();
     assert!(err.to_string().contains("multiple"), "err: {}", err);
 }
 
@@ -261,7 +260,11 @@ fn add_single_skill_stores_name_description_and_tools() {
 
     let spec = load_spec(tmp.path()).unwrap();
     match &spec.rules[0].kind {
-        RuleKind::Skill { name, description, allowed_tools } => {
+        RuleKind::Skill {
+            name,
+            description,
+            allowed_tools,
+        } => {
             assert_eq!(name.as_deref(), Some("git-helper"));
             assert_eq!(description.as_deref(), Some("Helps with git"));
             assert_eq!(allowed_tools.as_deref(), Some("Read Grep Bash"));
@@ -290,7 +293,11 @@ fn add_single_agent_stores_overrides() {
 
     let spec = load_spec(tmp.path()).unwrap();
     match &spec.rules[0].kind {
-        RuleKind::Agent { name, description, allowed_tools } => {
+        RuleKind::Agent {
+            name,
+            description,
+            allowed_tools,
+        } => {
             assert_eq!(name.as_deref(), Some("review"));
             assert_eq!(description.as_deref(), Some("PR review"));
             assert!(allowed_tools.is_none());

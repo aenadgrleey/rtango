@@ -1,7 +1,7 @@
+use rtango::agent::PlainParser;
 use rtango::agent::frontmatter::FrontMatterMapper;
 use rtango::agent::permission::Permission;
 use rtango::agent::write::FrontMatterWriter;
-use rtango::agent::PlainParser;
 
 fn parser() -> PlainParser {
     PlainParser
@@ -28,8 +28,14 @@ fn canonical_permissions_round_trip() {
         Permission::Other("CustomTool".into()),
     ];
     for perm in cases {
-        let token = p.format_permission(&perm).expect("plain emits every permission");
-        assert_eq!(p.parse_permission(&token), perm, "round-trip failed for {perm:?}");
+        let token = p
+            .format_permission(&perm)
+            .expect("plain emits every permission");
+        assert_eq!(
+            p.parse_permission(&token),
+            perm,
+            "round-trip failed for {perm:?}"
+        );
     }
 }
 
