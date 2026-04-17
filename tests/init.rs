@@ -225,8 +225,8 @@ mod exec {
 
         init::exec(tmp.path(), false, vec![], false).unwrap();
 
-        assert!(tmp.path().join(".rtango.yaml").exists());
-        assert!(tmp.path().join(".rtango.lock").exists());
+        assert!(tmp.path().join(".rtango/spec.yaml").exists());
+        assert!(tmp.path().join(".rtango/lock.yaml").exists());
     }
 
     #[test]
@@ -236,7 +236,7 @@ mod exec {
             &tmp.path().join(".claude/skills/foo/SKILL.md"),
             "---\nname: foo\n---\n",
         );
-        write_file(&tmp.path().join(".rtango.yaml"), "version: 1\nagents: []\n");
+        write_file(&tmp.path().join(".rtango/spec.yaml"), "version: 1\nagents: []\n");
 
         let result = init::exec(tmp.path(), false, vec![], false);
         assert!(result.is_err());
@@ -251,11 +251,11 @@ mod exec {
             &tmp.path().join(".claude/skills/foo/SKILL.md"),
             "---\nname: foo\n---\n",
         );
-        write_file(&tmp.path().join(".rtango.yaml"), "version: 1\nagents: []\n");
+        write_file(&tmp.path().join(".rtango/spec.yaml"), "version: 1\nagents: []\n");
 
         init::exec(tmp.path(), true, vec![], false).unwrap();
 
-        let content = fs::read_to_string(tmp.path().join(".rtango.yaml")).unwrap();
+        let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("claude-code"));
     }
 
@@ -275,7 +275,7 @@ mod exec {
 
         init::exec(tmp.path(), false, vec!["copilot".into()], false).unwrap();
 
-        let content = fs::read_to_string(tmp.path().join(".rtango.yaml")).unwrap();
+        let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("copilot"));
         assert!(!content.contains("claude-code"));
     }
@@ -290,7 +290,7 @@ mod exec {
 
         init::exec(tmp.path(), false, vec!["copilot".into()], true).unwrap();
 
-        let content = fs::read_to_string(tmp.path().join(".rtango.yaml")).unwrap();
+        let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("copilot"));
         assert!(!content.contains("claude-code"));
     }
@@ -317,7 +317,7 @@ mod exec {
 
         init::exec(tmp.path(), false, vec![], false).unwrap();
 
-        let content = fs::read_to_string(tmp.path().join(".rtango.yaml")).unwrap();
+        let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("claude-code"));
         assert!(content.contains(".claude/skills/"));
         assert!(content.contains("skill-set"));
@@ -333,7 +333,7 @@ mod exec {
 
         init::exec(tmp.path(), false, vec![], false).unwrap();
 
-        let content = fs::read_to_string(tmp.path().join(".rtango.lock")).unwrap();
+        let content = fs::read_to_string(tmp.path().join(".rtango/lock.yaml")).unwrap();
         assert!(content.contains("version: 1"));
         assert!(content.contains("deployments: []"));
     }
@@ -348,7 +348,7 @@ mod exec {
 
         init::exec(tmp.path(), false, vec![], false).unwrap();
 
-        let content = fs::read_to_string(tmp.path().join(".rtango.yaml")).unwrap();
+        let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("version: 1"));
     }
 }

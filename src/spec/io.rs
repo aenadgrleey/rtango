@@ -8,15 +8,20 @@ use crate::error::RtangoError;
 
 use super::{Lock, Spec};
 
-const SPEC_FILE: &str = ".rtango.yaml";
-const LOCK_FILE: &str = ".rtango.lock";
+const RTANGO_DIR: &str = ".rtango";
+const SPEC_FILE: &str = "spec.yaml";
+const LOCK_FILE: &str = "lock.yaml";
+
+pub fn rtango_dir(root: &Path) -> std::path::PathBuf {
+    root.join(RTANGO_DIR)
+}
 
 pub fn spec_path(root: &Path) -> std::path::PathBuf {
-    root.join(SPEC_FILE)
+    rtango_dir(root).join(SPEC_FILE)
 }
 
 pub fn lock_path(root: &Path) -> std::path::PathBuf {
-    root.join(LOCK_FILE)
+    rtango_dir(root).join(LOCK_FILE)
 }
 
 pub fn load_spec(root: &Path) -> anyhow::Result<Spec> {
@@ -76,6 +81,10 @@ pub fn load_lock_or_empty(root: &Path) -> anyhow::Result<Lock> {
 
 pub fn save_lock(root: &Path, lock: &Lock) -> anyhow::Result<()> {
     let path = lock_path(root);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
     let yaml = serde_yml::to_string(lock)?;
     fs::write(&path, yaml).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())

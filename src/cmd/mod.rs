@@ -13,7 +13,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Scan project and create .rtango.yaml + .rtango.lock
+    /// Scan project and create .rtango/spec.yaml + .rtango/lock.yaml
     Init {
         /// Overwrite existing spec
         #[arg(short, long)]

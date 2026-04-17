@@ -19,7 +19,8 @@ fn setup_copilot_skill(root: &Path, name: &str, body: &str) {
 
 fn write_spec(root: &Path, spec: &Spec) {
     let yaml = serde_yml::to_string(spec).unwrap();
-    fs::write(root.join(".rtango.yaml"), yaml).unwrap();
+    fs::create_dir_all(root.join(".rtango")).unwrap();
+    fs::write(root.join(".rtango/spec.yaml"), yaml).unwrap();
 }
 
 fn make_spec(agents: Vec<&str>, rules: Vec<Rule>) -> Spec {
@@ -114,7 +115,7 @@ fn check_mode_does_not_write_files_and_errors_when_not_clean() {
     assert!(!target.exists());
 
     // Verify no lock was written
-    assert!(!root.join(".rtango.lock").exists());
+    assert!(!root.join(".rtango/lock.yaml").exists());
 }
 
 #[test]

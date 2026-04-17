@@ -4,6 +4,7 @@ use anyhow::bail;
 
 use crate::agent::{self, DetectedAgent, SourceKind};
 use crate::error::RtangoError;
+use crate::spec::io::{lock_path, rtango_dir, spec_path};
 use crate::spec::{AgentName, Defaults, Lock, Rule, RuleKind, Source, Spec};
 
 pub fn exec(
@@ -12,8 +13,8 @@ pub fn exec(
     agents: Vec<String>,
     no_detect: bool,
 ) -> anyhow::Result<()> {
-    let spec_path = root.join(".rtango.yaml");
-    let lock_path = root.join(".rtango.lock");
+    let spec_path = spec_path(root);
+    let lock_path = lock_path(root);
 
     if spec_path.exists() && !force {
         bail!(RtangoError::SpecExists);
@@ -80,6 +81,7 @@ pub fn exec(
     let spec_yaml = serde_yml::to_string(&spec)?;
     let lock_yaml = serde_yml::to_string(&lock)?;
 
+    std::fs::create_dir_all(rtango_dir(root))?;
     std::fs::write(&spec_path, &spec_yaml)?;
     std::fs::write(&lock_path, &lock_yaml)?;
 

@@ -46,8 +46,9 @@ fn skill_set_rule(id: &str, path: &str, schema: &str) -> Rule {
 fn write_spec_and_lock(root: &std::path::Path, spec: &Spec, lock: &Lock) {
     let spec_yaml = serde_yml::to_string(spec).unwrap();
     let lock_yaml = serde_yml::to_string(lock).unwrap();
-    fs::write(root.join(".rtango.yaml"), spec_yaml).unwrap();
-    fs::write(root.join(".rtango.lock"), lock_yaml).unwrap();
+    fs::create_dir_all(root.join(".rtango")).unwrap();
+    fs::write(root.join(".rtango/spec.yaml"), spec_yaml).unwrap();
+    fs::write(root.join(".rtango/lock.yaml"), lock_yaml).unwrap();
 }
 
 // ── Tests ────────────────────────────────────────────────────────────
