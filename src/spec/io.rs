@@ -58,6 +58,17 @@ pub fn validate_spec(spec: &Spec) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn save_spec(root: &Path, spec: &Spec) -> anyhow::Result<()> {
+    let path = spec_path(root);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    let yaml = serde_yml::to_string(spec)?;
+    fs::write(&path, yaml).with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
+}
+
 pub fn load_lock(root: &Path) -> anyhow::Result<Lock> {
     let path = lock_path(root);
     let content = fs::read_to_string(&path)

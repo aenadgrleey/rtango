@@ -1,3 +1,4 @@
+pub mod add;
 pub mod init;
 pub mod own;
 pub mod status;
@@ -71,6 +72,40 @@ pub enum Command {
         #[arg(short, long)]
         clear: bool,
     },
+
+    /// Append a rule to the spec (mechanical — no validation beyond id/source/kind)
+    Add {
+        /// Rule id (must be unique within the spec)
+        id: String,
+
+        /// Local source path (directory or file, relative to root)
+        #[arg(short = 'l', long = "local", value_name = "PATH", conflicts_with = "repo")]
+        local: Option<std::path::PathBuf>,
+
+        /// GitHub source: owner/repo[@ref][:path]
+        #[arg(short = 'r', long = "repo", value_name = "SPEC", conflicts_with = "local")]
+        repo: Option<String>,
+
+        /// Kind is agent-set
+        #[arg(
+            long = "agent-set",
+            visible_alias = "as",
+            conflicts_with = "skill_set"
+        )]
+        agent_set: bool,
+
+        /// Kind is skill-set
+        #[arg(
+            long = "skill-set",
+            visible_alias = "ss",
+            conflicts_with = "agent_set"
+        )]
+        skill_set: bool,
+
+        /// Schema agent for the rule (required when spec has >1 agent)
+        #[arg(short = 'g', long = "agent", value_name = "AGENT")]
+        schema_agent: Option<String>,
+    },
 }
 
 pub fn run(cli: Cli) -> anyhow::Result<()> {
@@ -80,5 +115,13 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Sync { check, force, rule, adopt } => sync::exec(&root, check, force, rule, adopt),
         Command::Status { rule, verbose } => status::exec(&root, rule, verbose),
         Command::Own { path, rule_id, clear } => own::exec(&root, path, rule_id, clear),
+        Command::Add {
+            id,
+            local,
+            repo,
+            agent_set,
+            skill_set,
+            schema_agent,
+        } => add::exec(&root, id, local, repo, agent_set, skill_set, schema_agent),
     }
 }
