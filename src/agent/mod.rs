@@ -4,6 +4,7 @@ pub mod detect;
 pub mod frontmatter;
 mod parse;
 pub mod permission;
+pub mod write;
 
 use std::path::{Path, PathBuf};
 
@@ -15,6 +16,7 @@ pub use detect::{DetectedAgent, DetectedSource, Detector, SourceKind};
 pub use frontmatter::{FrontMatter, FrontMatterMapper};
 pub use parse::*;
 pub use permission::Permission;
+pub use write::*;
 
 use crate::spec::AgentName;
 
@@ -27,7 +29,7 @@ fn all_parsers() -> Vec<Box<dyn AgentParser>> {
 
 /// Blanket trait combining all per-agent capabilities.
 /// Every agent parser struct implements this via the individual traits.
-pub trait AgentParser: SkillsParser + AgentsParser + FrontMatterMapper + Detector {}
+pub trait AgentParser: SkillsParser + AgentsParser + FrontMatterMapper + FrontMatterWriter + SkillsWriter + AgentsWriter + Detector {}
 impl AgentParser for CopilotParser {}
 impl AgentParser for ClaudeCodeParser {}
 
@@ -48,6 +50,30 @@ pub fn agents_parser(name: &AgentName) -> Option<Box<dyn AgentsParser>> {
 }
 
 pub fn frontmatter_mapper(name: &AgentName) -> Option<Box<dyn FrontMatterMapper>> {
+    match name.as_str() {
+        "copilot" => Some(Box::new(CopilotParser)),
+        "claude-code" => Some(Box::new(ClaudeCodeParser)),
+        _ => None,
+    }
+}
+
+pub fn frontmatter_writer(name: &AgentName) -> Option<Box<dyn FrontMatterWriter>> {
+    match name.as_str() {
+        "copilot" => Some(Box::new(CopilotParser)),
+        "claude-code" => Some(Box::new(ClaudeCodeParser)),
+        _ => None,
+    }
+}
+
+pub fn skills_writer(name: &AgentName) -> Option<Box<dyn SkillsWriter>> {
+    match name.as_str() {
+        "copilot" => Some(Box::new(CopilotParser)),
+        "claude-code" => Some(Box::new(ClaudeCodeParser)),
+        _ => None,
+    }
+}
+
+pub fn agents_writer(name: &AgentName) -> Option<Box<dyn AgentsWriter>> {
     match name.as_str() {
         "copilot" => Some(Box::new(CopilotParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),

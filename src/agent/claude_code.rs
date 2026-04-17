@@ -7,7 +7,8 @@ use super::detect::{self, DetectedAgent, DetectedSource, Detector, SourceKind};
 use super::frontmatter::{FrontMatter, FrontMatterMapper, tokenize_tools};
 use super::parse::{self, AgentsParser, SkillsParser};
 use super::permission::Permission;
-use super::{AgentSet, SkillSet};
+use super::write::{self, AgentsWriter, FrontMatterWriter, SkillsWriter};
+use super::{Agent, AgentSet, Skill, SkillSet};
 
 pub struct ClaudeCodeParser;
 
@@ -76,6 +77,53 @@ impl FrontMatterMapper for ClaudeCodeParser {
         Ok(fm)
     }
 
+}
+
+impl FrontMatterWriter for ClaudeCodeParser {
+    fn format_permission(&self, perm: &Permission) -> Option<String> {
+        let token = match perm {
+            Permission::Read => "Read".into(),
+            Permission::Write => "Write".into(),
+            Permission::Edit => "Edit".into(),
+            Permission::Shell(None) => "Bash".into(),
+            Permission::Shell(Some(pattern)) => format!("Bash({pattern})"),
+            Permission::Grep => "Grep".into(),
+            Permission::Glob => "Glob".into(),
+            Permission::WebFetch => "WebFetch".into(),
+            Permission::WebSearch => "WebSearch".into(),
+            Permission::NotebookRead => "NotebookRead".into(),
+            Permission::NotebookEdit => "NotebookEdit".into(),
+            Permission::TodoRead => "TodoRead".into(),
+            Permission::TodoWrite => "TodoWrite".into(),
+            Permission::ListDir => "LS".into(),
+            Permission::Other(s) => s.clone(),
+        };
+        Some(token)
+    }
+
+    fn format_frontmatter(&self, fm: &FrontMatter) -> String {
+        write::format_standard_frontmatter(fm, self)
+    }
+}
+
+impl SkillsWriter for ClaudeCodeParser {
+    fn name(&self) -> AgentName {
+        AgentName::new("claude-code")
+    }
+
+    fn write_skill(&self, root: &Path, skill: &Skill) -> anyhow::Result<PathBuf> {
+        write::write_standard_skill(&root.join(".claude/skills"), skill, self)
+    }
+}
+
+impl AgentsWriter for ClaudeCodeParser {
+    fn name(&self) -> AgentName {
+        AgentName::new("claude-code")
+    }
+
+    fn write_agent(&self, root: &Path, agent: &Agent) -> anyhow::Result<PathBuf> {
+        write::write_standard_agent(&root.join(".claude/agents"), agent, self)
+    }
 }
 
 impl Detector for ClaudeCodeParser {

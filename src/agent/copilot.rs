@@ -7,7 +7,8 @@ use super::detect::{self, DetectedAgent, DetectedSource, Detector, SourceKind};
 use super::frontmatter::{FrontMatter, FrontMatterMapper, tokenize_tools};
 use super::parse::{self, AgentsParser, SkillsParser};
 use super::permission::Permission;
-use super::{AgentSet, SkillSet};
+use super::write::{self, AgentsWriter, FrontMatterWriter, SkillsWriter};
+use super::{Agent, AgentSet, Skill, SkillSet};
 
 pub struct CopilotParser;
 
@@ -68,6 +69,52 @@ impl FrontMatterMapper for CopilotParser {
         Ok(fm)
     }
 
+}
+
+impl FrontMatterWriter for CopilotParser {
+    fn format_permission(&self, perm: &Permission) -> Option<String> {
+        match perm {
+            Permission::Read => Some("read".into()),
+            Permission::Write => Some("write".into()),
+            Permission::Edit => Some("edit".into()),
+            Permission::Shell(_) => Some("shell".into()),
+            Permission::Grep => Some("grep".into()),
+            Permission::Glob => Some("glob".into()),
+            Permission::WebFetch => Some("web_fetch".into()),
+            Permission::WebSearch => Some("web_search".into()),
+            Permission::Other(s) => Some(s.clone()),
+            // Claude Code-only permissions have no Copilot equivalent
+            Permission::NotebookRead
+            | Permission::NotebookEdit
+            | Permission::TodoRead
+            | Permission::TodoWrite
+            | Permission::ListDir => None,
+        }
+    }
+
+    fn format_frontmatter(&self, fm: &FrontMatter) -> String {
+        write::format_standard_frontmatter(fm, self)
+    }
+}
+
+impl SkillsWriter for CopilotParser {
+    fn name(&self) -> AgentName {
+        AgentName::new("copilot")
+    }
+
+    fn write_skill(&self, root: &Path, skill: &Skill) -> anyhow::Result<PathBuf> {
+        write::write_standard_skill(&root.join(".github/skills"), skill, self)
+    }
+}
+
+impl AgentsWriter for CopilotParser {
+    fn name(&self) -> AgentName {
+        AgentName::new("copilot")
+    }
+
+    fn write_agent(&self, root: &Path, agent: &Agent) -> anyhow::Result<PathBuf> {
+        write::write_standard_agent(&root.join(".github/agents"), agent, self)
+    }
 }
 
 impl Detector for CopilotParser {
