@@ -1,24 +1,43 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::agent::{self, frontmatter::{FrontMatter, split_frontmatter}};
 use crate::spec::{Rule, RuleKind, Source};
 
-use super::{ExpandedItem, ExpandedKind, hash_content};
+use super::{ExpandedItem, ExpandedKind, fetch_github, hash_content};
 
 /// Expand a single rule into its constituent items by reading source files.
 ///
 /// - `Skill` / `Agent`: produces one item (single file).
 /// - `SkillSet` / `AgentSet`: produces N items (one per source file in the directory).
 pub fn expand_rule(root: &Path, rule: &Rule) -> anyhow::Result<Vec<ExpandedItem>> {
-    let Source::Local(ref rel_path) = rule.source;
-    let abs_path = root.join(rel_path);
+    let (project_root, abs_path) = materialize(root, &rule.source)?;
 
     match &rule.kind {
-        RuleKind::SkillSet {} => expand_skill_set(root, rule, &abs_path),
-        RuleKind::AgentSet {} => expand_agent_set(root, rule, &abs_path),
+        RuleKind::SkillSet {} => expand_skill_set(&project_root, rule, &abs_path),
+        RuleKind::AgentSet {} => expand_agent_set(&project_root, rule, &abs_path),
         RuleKind::Skill {} => expand_single_skill(rule, &abs_path),
         RuleKind::Agent {} => expand_single_agent(rule, &abs_path),
+    }
+}
+
+/// Resolve a source to (project_root, filter_path) on disk.
+///
+/// `project_root` is what gets handed to agent parsers (which internally append
+/// `.claude/skills`, `.agent/skills`, etc.). `filter_path` is what the
+/// `expand_*_set` helpers use to narrow the parser's results to a subtree.
+fn materialize(root: &Path, source: &Source) -> anyhow::Result<(PathBuf, PathBuf)> {
+    match source {
+        Source::Local(rel) => Ok((root.to_path_buf(), root.join(rel))),
+        Source::Github(g) => {
+            let cache_root = fetch_github(g)?;
+            let filter = if g.path.is_empty() {
+                cache_root.clone()
+            } else {
+                cache_root.join(&g.path)
+            };
+            Ok((cache_root, filter))
+        }
     }
 }
 

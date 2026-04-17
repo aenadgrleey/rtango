@@ -1,8 +1,10 @@
 mod expand;
+mod fetch;
 mod plan;
 mod execute;
 
 pub use expand::*;
+pub use fetch::*;
 pub use plan::*;
 pub use execute::*;
 
