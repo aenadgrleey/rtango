@@ -12,6 +12,14 @@ Modern projects juggle several coding agents (Claude Code, Copilot, Codex, OpenC
 
 ## Install
 
+From [crates.io](https://crates.io/crates/rtango):
+
+```sh
+cargo install rtango
+```
+
+Or from a local checkout:
+
 ```sh
 cargo install --path .
 ```
