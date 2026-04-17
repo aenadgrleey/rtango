@@ -3,6 +3,7 @@ pub mod init;
 pub mod own;
 pub mod status;
 pub mod sync;
+pub mod wander;
 
 use clap::{Parser, Subcommand};
 
@@ -54,6 +55,13 @@ pub enum Command {
         /// Show up-to-date items too
         #[arg(short, long)]
         verbose: bool,
+    },
+
+    /// Run init + sync in-memory: render target files without creating `.rtango/`
+    Wander {
+        /// Additional target agent to render for (repeatable)
+        #[arg(short = 't', long = "target", value_name = "AGENT")]
+        targets: Vec<String>,
     },
 
     /// Record or clear a manual ownership decision for a contested path
@@ -174,6 +182,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Init { force, no_detect } => init::exec(&root, force, no_detect),
         Command::Sync { check, force, rule, adopt } => sync::exec(&root, check, force, rule, adopt),
         Command::Status { rule, verbose } => status::exec(&root, rule, verbose),
+        Command::Wander { targets } => wander::exec(&root, targets),
         Command::Own { path, rule_id, clear } => own::exec(&root, path, rule_id, clear),
         Command::Add {
             id,
