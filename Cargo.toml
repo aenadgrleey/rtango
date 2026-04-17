@@ -2,7 +2,21 @@
 name = "rtango"
 version = "0.1.0"
 edition = "2024"
-description = "Package manager for agent skills and configuration files"
+rust-version = "1.85"
+description = "Package manager for AI agent skills, agents, and system instruction files"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/aenadgrleey/rtango"
+homepage = "https://github.com/aenadgrleey/rtango"
+documentation = "https://docs.rs/rtango"
+readme = "README.md"
+keywords = ["ai", "agents", "claude", "copilot", "skills"]
+categories = ["command-line-utilities", "development-tools"]
+authors = ["aenadgrleey <aenadgrleey@protonmail.com>"]
+exclude = [
+    ".github/",
+    ".rtango/",
+    "demo/",
+]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
