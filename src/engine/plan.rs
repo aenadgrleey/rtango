@@ -74,6 +74,21 @@ fn find_lock_entry<'a>(
     })
 }
 
+/// Find any lock deployment for (agent, target_path), regardless of rule_id.
+/// Used to adopt an existing on-disk file when a path is reparented to a new
+/// owning rule — we forward the prior content_hash so a matching disk file is
+/// treated as already-in-sync instead of emitting a "not tracked in lock"
+/// conflict.
+fn find_reparent_candidate<'a>(
+    lock: &'a Lock,
+    agent: &AgentName,
+    target_path: &Path,
+) -> Option<&'a Deployment> {
+    lock.deployments
+        .iter()
+        .find(|d| d.agent == *agent && d.content == target_path)
+}
+
 /// Compute the full sync plan.
 pub fn compute_plan(
     root: &Path,
@@ -92,21 +107,7 @@ pub fn compute_plan(
         .iter()
         .map(|r| expand_rule(root, r))
         .collect::<anyhow::Result<_>>()?;
-
-    let mut candidates: HashMap<PathBuf, HashSet<String>> = HashMap::new();
-    for (rule, expanded) in spec.rules.iter().zip(expansions.iter()) {
-        for item in expanded {
-            let source_file = match &item.kind {
-                ExpandedKind::Skill(s) => s.file.clone(),
-                ExpandedKind::Agent(a) => a.file.clone(),
-            };
-            candidates.entry(source_file).or_default().insert(rule.id.clone());
-            for target_agent in &spec.agents {
-                let tp = root.join(target_path_for(target_agent, &item.kind)?);
-                candidates.entry(tp).or_default().insert(rule.id.clone());
-            }
-        }
-    }
+    let candidates = collect_candidates(root, spec)?;
 
     // Phase 2: resolve ownership for every touched path.
     let owners = resolve_owners(spec, &candidates, lock)?;
@@ -164,9 +165,29 @@ pub fn compute_plan(
                 ));
                 produced.insert(abs_target.clone());
 
-                let lock_entry = find_lock_entry(lock, &rendered.rule_id, &rendered.agent, &rendered.target_path);
                 let disk_content = fs::read_to_string(&abs_target).ok();
                 let disk_hash = disk_content.as_deref().map(hash_content);
+
+                // Normal lookup: lock entry for *this* rule.
+                let direct = find_lock_entry(lock, &rendered.rule_id, &rendered.agent, &rendered.target_path);
+                // Reparent adoption: if no direct entry but another rule has a
+                // lock entry for the same (agent, target_path) and the on-disk
+                // file still matches its content_hash, forward that entry so
+                // the target is adopted rather than flagged as a conflict.
+                let adopted: Option<Deployment> = match (direct, disk_hash.as_deref()) {
+                    (None, Some(dh)) => find_reparent_candidate(lock, &rendered.agent, &rendered.target_path)
+                        .filter(|cand| cand.content_hash == dh)
+                        .map(|cand| Deployment {
+                            rule_id: rendered.rule_id.clone(),
+                            agent: cand.agent.clone(),
+                            source: cand.source.clone(),
+                            source_hash: cand.source_hash.clone(),
+                            content: cand.content.clone(),
+                            content_hash: cand.content_hash.clone(),
+                        }),
+                    _ => None,
+                };
+                let lock_entry = direct.or(adopted.as_ref());
 
                 let status = compute_status(
                     lock_entry,
@@ -221,6 +242,129 @@ pub fn compute_plan(
     })
 }
 
+/// A path that multiple rules claim and which cannot be resolved without a
+/// user decision (recorded in `.rtango/lock.yaml` under `owners:` or via
+/// `rtango own`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AmbiguousPath {
+    pub path: PathBuf,
+    /// All rule ids that claim this path, sorted.
+    pub candidates: Vec<String>,
+}
+
+/// One outcome of trying to resolve a single path: either we know the owner
+/// or we need a user decision.
+enum Resolution {
+    Owner(String),
+    Ambiguous(AmbiguousPath),
+}
+
+fn resolve_one(
+    path: &Path,
+    claimants: &HashSet<String>,
+    rule_kinds: &HashMap<&str, &RuleKind>,
+    lock_owners: &HashMap<&Path, &str>,
+) -> anyhow::Result<Resolution> {
+    if claimants.len() == 1 {
+        return Ok(Resolution::Owner(claimants.iter().next().unwrap().clone()));
+    }
+
+    // Multiple claimants. First, honor any user decision from the lock.
+    if let Some(&locked) = lock_owners.get(path) {
+        if claimants.contains(locked) {
+            return Ok(Resolution::Owner(locked.to_string()));
+        }
+        // Lock points at a rule that no longer claims this path; fall
+        // through to heuristic.
+    }
+
+    // Heuristic: a single-file rule is strictly more specific than a set.
+    let singles: Vec<&String> = claimants
+        .iter()
+        .filter(|r| matches!(
+            rule_kinds.get(r.as_str()),
+            Some(RuleKind::Skill {}) | Some(RuleKind::Agent {})
+        ))
+        .collect();
+    match singles.len() {
+        0 => {}
+        1 => return Ok(Resolution::Owner(singles[0].clone())),
+        _ => {
+            let mut names: Vec<&str> = singles.iter().map(|s| s.as_str()).collect();
+            names.sort();
+            anyhow::bail!(
+                "ambiguous ownership for {}: single-file rules {:?} both claim this path",
+                path.display(),
+                names
+            );
+        }
+    }
+
+    let mut names: Vec<String> = claimants.iter().cloned().collect();
+    names.sort();
+    Ok(Resolution::Ambiguous(AmbiguousPath {
+        path: path.to_path_buf(),
+        candidates: names,
+    }))
+}
+
+/// Return every path the spec touches that currently has no unambiguous
+/// owner. Callers (e.g. `rtango sync`) can prompt the user for a decision
+/// and re-run with an updated lock.
+pub fn find_ambiguities(
+    root: &Path,
+    spec: &Spec,
+    lock: &Lock,
+) -> anyhow::Result<Vec<AmbiguousPath>> {
+    let candidates = collect_candidates(root, spec)?;
+    let rule_kinds: HashMap<&str, &RuleKind> = spec
+        .rules
+        .iter()
+        .map(|r| (r.id.as_str(), &r.kind))
+        .collect();
+    let lock_owners: HashMap<&Path, &str> = lock
+        .owners
+        .iter()
+        .map(|o| (o.path.as_path(), o.rule_id.as_str()))
+        .collect();
+
+    let mut out = Vec::new();
+    for (path, claimants) in &candidates {
+        if let Resolution::Ambiguous(a) = resolve_one(path, claimants, &rule_kinds, &lock_owners)? {
+            out.push(a);
+        }
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
+}
+
+fn collect_candidates(
+    root: &Path,
+    spec: &Spec,
+) -> anyhow::Result<HashMap<PathBuf, HashSet<String>>> {
+    let expansions: Vec<Vec<ExpandedItem>> = spec
+        .rules
+        .iter()
+        .map(|r| expand_rule(root, r))
+        .collect::<anyhow::Result<_>>()?;
+
+    let mut candidates: HashMap<PathBuf, HashSet<String>> = HashMap::new();
+    for (rule, expanded) in spec.rules.iter().zip(expansions.iter()) {
+        for item in expanded {
+            let source_file = match &item.kind {
+                ExpandedKind::Skill(s) => s.file.clone(),
+                ExpandedKind::Agent(a) => a.file.clone(),
+            };
+            candidates.entry(source_file).or_default().insert(rule.id.clone());
+            for target_agent in &spec.agents {
+                let tp = root.join(target_path_for(target_agent, &item.kind)?);
+                candidates.entry(tp).or_default().insert(rule.id.clone());
+            }
+        }
+    }
+    Ok(candidates)
+}
+
 /// Pick one rule to own each path. Single claimant → auto. Multiple claimants
 /// → use lock-recorded decision if valid; otherwise heuristic (single-file
 /// rules beat set rules). Set-vs-set with no lock entry errors out so the
@@ -243,55 +387,19 @@ fn resolve_owners(
 
     let mut resolved: HashMap<PathBuf, String> = HashMap::new();
     for (path, claimants) in candidates {
-        if claimants.len() == 1 {
-            let rule_id = claimants.iter().next().unwrap().clone();
-            resolved.insert(path.clone(), rule_id);
-            continue;
-        }
-
-        // Multiple claimants. First, honor any user decision from the lock.
-        if let Some(&locked) = lock_owners.get(path.as_path()) {
-            if claimants.contains(locked) {
-                resolved.insert(path.clone(), locked.to_string());
-                continue;
+        match resolve_one(path, claimants, &rule_kinds, &lock_owners)? {
+            Resolution::Owner(id) => {
+                resolved.insert(path.clone(), id);
             }
-            // Lock points at a rule that no longer claims this path; fall
-            // through to heuristic.
-        }
-
-        // Heuristic: a single-file rule is strictly more specific than a set.
-        let singles: Vec<&String> = claimants
-            .iter()
-            .filter(|r| matches!(
-                rule_kinds.get(r.as_str()),
-                Some(RuleKind::Skill {}) | Some(RuleKind::Agent {})
-            ))
-            .collect();
-        match singles.len() {
-            0 => {}
-            1 => {
-                resolved.insert(path.clone(), singles[0].clone());
-                continue;
-            }
-            _ => {
-                let mut names: Vec<&str> = singles.iter().map(|s| s.as_str()).collect();
-                names.sort();
+            Resolution::Ambiguous(a) => {
                 anyhow::bail!(
-                    "ambiguous ownership for {}: single-file rules {:?} both claim this path",
-                    path.display(),
-                    names
+                    "ambiguous ownership for {}: rules {:?} all claim this path. \
+                     Record a decision in .rtango/lock.yaml under `owners:` or narrow the spec.",
+                    a.path.display(),
+                    a.candidates
                 );
             }
         }
-
-        let mut names: Vec<&str> = claimants.iter().map(String::as_str).collect();
-        names.sort();
-        anyhow::bail!(
-            "ambiguous ownership for {}: rules {:?} all claim this path. \
-             Record a decision in .rtango/lock.yaml under `owners:` or narrow the spec.",
-            path.display(),
-            names
-        );
     }
     Ok(resolved)
 }

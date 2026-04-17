@@ -1,7 +1,57 @@
+use std::io::{self, BufRead, Write};
 use std::path::Path;
 
-use crate::engine::{compute_plan, execute_plan, DeploymentStatus, Plan};
+use crate::engine::{
+    AmbiguousPath, DeploymentStatus, Plan, compute_plan, execute_plan, find_ambiguities,
+};
 use crate::spec::io::{load_lock_or_empty, load_spec, save_lock};
+use crate::spec::Ownership;
+
+/// Strategy for resolving set-vs-set ambiguity during `sync`. `None` from
+/// `choose_owner` means the user declined to pick — sync aborts with the
+/// normal ambiguity error.
+pub trait Prompter {
+    fn choose_owner(&mut self, ambiguity: &AmbiguousPath) -> anyhow::Result<Option<String>>;
+}
+
+/// Default prompter: reads a rule id from stdin. Returns `None` on EOF or an
+/// empty/"abort" answer.
+pub struct StdioPrompter;
+
+impl Prompter for StdioPrompter {
+    fn choose_owner(&mut self, ambiguity: &AmbiguousPath) -> anyhow::Result<Option<String>> {
+        let mut out = io::stdout().lock();
+        writeln!(
+            out,
+            "\nmultiple rules claim {}",
+            ambiguity.path.display()
+        )?;
+        for (i, id) in ambiguity.candidates.iter().enumerate() {
+            writeln!(out, "  [{}] {}", i + 1, id)?;
+        }
+        write!(out, "pick an owner (number or id, empty to abort): ")?;
+        out.flush()?;
+
+        let mut line = String::new();
+        let n = io::stdin().lock().read_line(&mut line)?;
+        if n == 0 {
+            return Ok(None);
+        }
+        let answer = line.trim();
+        if answer.is_empty() {
+            return Ok(None);
+        }
+        if let Ok(idx) = answer.parse::<usize>() {
+            if idx >= 1 && idx <= ambiguity.candidates.len() {
+                return Ok(Some(ambiguity.candidates[idx - 1].clone()));
+            }
+        }
+        if ambiguity.candidates.iter().any(|c| c == answer) {
+            return Ok(Some(answer.to_string()));
+        }
+        anyhow::bail!("'{}' is not one of the candidate rules", answer);
+    }
+}
 
 pub fn exec(
     root: &Path,
@@ -10,8 +60,56 @@ pub fn exec(
     rule: Option<String>,
     adopt: bool,
 ) -> anyhow::Result<()> {
+    let mut prompter = StdioPrompter;
+    exec_with_prompter(root, check, force, rule, adopt, &mut prompter)
+}
+
+pub fn exec_with_prompter(
+    root: &Path,
+    check: bool,
+    force: bool,
+    rule: Option<String>,
+    adopt: bool,
+    prompter: &mut dyn Prompter,
+) -> anyhow::Result<()> {
     let spec = load_spec(root)?;
-    let lock = load_lock_or_empty(root)?;
+    let mut lock = load_lock_or_empty(root)?;
+
+    // Resolve any set-vs-set ambiguities up front so compute_plan can proceed
+    // without bailing. Each answer is persisted to .rtango/lock.yaml so future
+    // syncs apply the same decision.
+    loop {
+        let ambiguities = find_ambiguities(root, &spec, &lock)?;
+        if ambiguities.is_empty() {
+            break;
+        }
+        for a in &ambiguities {
+            let choice = prompter.choose_owner(a)?;
+            let Some(rule_id) = choice else {
+                anyhow::bail!(
+                    "ambiguous ownership for {}: rules {:?} all claim this path. \
+                     Record a decision in .rtango/lock.yaml under `owners:` or narrow the spec.",
+                    a.path.display(),
+                    a.candidates
+                );
+            };
+            if !a.candidates.iter().any(|c| c == &rule_id) {
+                anyhow::bail!(
+                    "rule '{}' does not claim {}; candidates were {:?}",
+                    rule_id,
+                    a.path.display(),
+                    a.candidates
+                );
+            }
+            lock.owners.retain(|o| o.path != a.path);
+            lock.owners.push(Ownership {
+                path: a.path.clone(),
+                rule_id,
+            });
+        }
+        save_lock(root, &lock)?;
+    }
+
     let plan = compute_plan(root, &spec, &lock, force || adopt)?;
 
     // If filtering by rule, partition the plan items. Owners are always

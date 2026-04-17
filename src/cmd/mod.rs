@@ -1,4 +1,5 @@
 pub mod init;
+pub mod own;
 pub mod status;
 pub mod sync;
 
@@ -57,6 +58,19 @@ pub enum Command {
         #[arg(short, long)]
         verbose: bool,
     },
+
+    /// Record or clear a manual ownership decision for a contested path
+    Own {
+        /// Target path (absolute, or relative to the project root)
+        path: std::path::PathBuf,
+
+        /// Rule id that should own the path (omit with --clear)
+        rule_id: Option<String>,
+
+        /// Remove any recorded ownership for this path
+        #[arg(short, long)]
+        clear: bool,
+    },
 }
 
 pub fn run(cli: Cli) -> anyhow::Result<()> {
@@ -65,5 +79,6 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Init { force, agent, no_detect } => init::exec(&root, force, agent, no_detect),
         Command::Sync { check, force, rule, adopt } => sync::exec(&root, check, force, rule, adopt),
         Command::Status { rule, verbose } => status::exec(&root, rule, verbose),
+        Command::Own { path, rule_id, clear } => own::exec(&root, path, rule_id, clear),
     }
 }

@@ -757,3 +757,91 @@ fn reparented_path_is_not_marked_as_orphan() {
         orphans
     );
 }
+
+#[test]
+fn reparented_target_adopts_existing_content_without_conflict() {
+    // Rule A owned .claude/skills/foo/SKILL.md on a prior sync. Spec now has
+    // rule B owning it. The on-disk file still matches the lock's recorded
+    // content_hash, so the new plan should adopt it as UpToDate — not emit
+    // a "target file exists but is not tracked in lock" conflict.
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "foo", "Foo body");
+
+    // First sync with rule "single" — writes disk + records a lock entry.
+    let spec_v1 = make_spec(
+        vec!["claude-code"],
+        vec![single_skill_rule("single", ".github/skills/foo", "copilot")],
+    );
+    let plan_v1 = compute_plan(root, &spec_v1, &empty_lock(), false).unwrap();
+    let lock_v1 = execute_plan(root, &plan_v1, &empty_lock(), false).unwrap();
+    assert!(root.join(".claude/skills/foo/SKILL.md").exists());
+    assert_eq!(
+        lock_v1.deployments.iter().filter(|d| d.rule_id == "single").count(),
+        1
+    );
+
+    // Spec v2: same source file, now owned by a set rule.
+    let spec_v2 = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("set", ".github/skills", "copilot")],
+    );
+    let plan_v2 = compute_plan(root, &spec_v2, &lock_v1, false).unwrap();
+
+    assert!(
+        !plan_v2.has_conflicts(),
+        "reparent should not produce a conflict; got {:?}",
+        plan_v2.items
+    );
+    let set_item = plan_v2
+        .items
+        .iter()
+        .find(|i| i.rule_id == "set" && i.target_path == PathBuf::from(".claude/skills/foo/SKILL.md"))
+        .expect("expected a set-rule deployment for foo");
+    assert_eq!(
+        set_item.status,
+        DeploymentStatus::UpToDate,
+        "expected adopted content to be UpToDate, got {:?}",
+        set_item.status
+    );
+
+    // Second sync with the set rule should succeed and leave the file alone.
+    let lock_v2 = execute_plan(root, &plan_v2, &lock_v1, false).unwrap();
+    assert!(lock_v2.deployments.iter().any(|d| d.rule_id == "set"));
+    assert!(!lock_v2.deployments.iter().any(|d| d.rule_id == "single"));
+}
+
+#[test]
+fn reparented_target_with_modified_source_is_updated() {
+    // Reparent + the source content changed since the prior lock. The new
+    // owner should plan an Update (not a conflict), because the on-disk file
+    // still matches the prior content_hash but the source now differs.
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "foo", "Foo body");
+
+    let spec_v1 = make_spec(
+        vec!["claude-code"],
+        vec![single_skill_rule("single", ".github/skills/foo", "copilot")],
+    );
+    let plan_v1 = compute_plan(root, &spec_v1, &empty_lock(), false).unwrap();
+    let lock_v1 = execute_plan(root, &plan_v1, &empty_lock(), false).unwrap();
+
+    // Source changes.
+    setup_copilot_skill(root, "foo", "Foo body v2");
+
+    // Reparent to set rule.
+    let spec_v2 = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("set", ".github/skills", "copilot")],
+    );
+    let plan_v2 = compute_plan(root, &spec_v2, &lock_v1, false).unwrap();
+
+    assert!(!plan_v2.has_conflicts(), "got {:?}", plan_v2.items);
+    let set_item = plan_v2
+        .items
+        .iter()
+        .find(|i| i.rule_id == "set" && i.target_path == PathBuf::from(".claude/skills/foo/SKILL.md"))
+        .unwrap();
+    assert_eq!(set_item.status, DeploymentStatus::Update);
+}
