@@ -1,5 +1,6 @@
 use rtango::agent::frontmatter::FrontMatterMapper;
 use rtango::agent::permission::Permission;
+use rtango::agent::write::FrontMatterWriter;
 use rtango::agent::PiParser;
 
 fn parser() -> PiParser {
@@ -7,25 +8,23 @@ fn parser() -> PiParser {
 }
 
 #[test]
-fn known_permissions() {
+fn parse_permission_is_passthrough() {
     let p = parser();
-    assert_eq!(p.parse_permission("read"), Permission::Read);
-    assert_eq!(p.parse_permission("write"), Permission::Write);
-    assert_eq!(p.parse_permission("edit"), Permission::Edit);
-    assert_eq!(p.parse_permission("shell"), Permission::Shell(None));
-    assert_eq!(p.parse_permission("bash"), Permission::Shell(None));
-    assert_eq!(p.parse_permission("grep"), Permission::Grep);
-    assert_eq!(p.parse_permission("glob"), Permission::Glob);
-    assert_eq!(p.parse_permission("web_fetch"), Permission::WebFetch);
-    assert_eq!(p.parse_permission("web_search"), Permission::WebSearch);
+    assert_eq!(p.parse_permission("read"), Permission::Other("read".into()));
+    assert_eq!(p.parse_permission("bash"), Permission::Other("bash".into()));
+    assert_eq!(
+        p.parse_permission("custom_tool"),
+        Permission::Other("custom_tool".into()),
+    );
 }
 
 #[test]
-fn unknown_permission() {
-    assert_eq!(
-        parser().parse_permission("custom_tool"),
-        Permission::Other("custom_tool".into()),
-    );
+fn format_permission_emits_nothing() {
+    let w = parser();
+    assert_eq!(w.format_permission(&Permission::Read), None);
+    assert_eq!(w.format_permission(&Permission::Write), None);
+    assert_eq!(w.format_permission(&Permission::Shell(None)), None);
+    assert_eq!(w.format_permission(&Permission::Other("x".into())), None);
 }
 
 #[test]
@@ -36,7 +35,11 @@ fn parse_full_frontmatter() {
     assert_eq!(fm.description.as_deref(), Some("does stuff"));
     assert_eq!(
         fm.allowed_tools,
-        vec![Permission::Read, Permission::Write, Permission::Shell(None)],
+        vec![
+            Permission::Other("read".into()),
+            Permission::Other("write".into()),
+            Permission::Other("bash".into()),
+        ],
     );
     assert!(fm.extra.is_empty());
 }

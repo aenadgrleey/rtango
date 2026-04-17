@@ -29,17 +29,7 @@ impl AgentsParser for PiParser {
 
 impl FrontMatterMapper for PiParser {
     fn parse_permission(&self, token: &str) -> Permission {
-        match token {
-            "read" => Permission::Read,
-            "write" => Permission::Write,
-            "edit" => Permission::Edit,
-            "shell" | "bash" => Permission::Shell(None),
-            "grep" => Permission::Grep,
-            "glob" => Permission::Glob,
-            "web_fetch" => Permission::WebFetch,
-            "web_search" => Permission::WebSearch,
-            other => Permission::Other(other.to_string()),
-        }
+        Permission::Other(token.to_string())
     }
 
     fn parse_frontmatter(&self, yaml: &str) -> anyhow::Result<FrontMatter> {
@@ -48,23 +38,8 @@ impl FrontMatterMapper for PiParser {
 }
 
 impl FrontMatterWriter for PiParser {
-    fn format_permission(&self, perm: &Permission) -> Option<String> {
-        match perm {
-            Permission::Read => Some("read".into()),
-            Permission::Write => Some("write".into()),
-            Permission::Edit => Some("edit".into()),
-            Permission::Shell(_) => Some("bash".into()),
-            Permission::Grep => Some("grep".into()),
-            Permission::Glob => Some("glob".into()),
-            Permission::WebFetch => Some("web_fetch".into()),
-            Permission::WebSearch => Some("web_search".into()),
-            Permission::Other(s) => Some(s.clone()),
-            Permission::NotebookRead
-            | Permission::NotebookEdit
-            | Permission::TodoRead
-            | Permission::TodoWrite
-            | Permission::ListDir => None,
-        }
+    fn format_permission(&self, _perm: &Permission) -> Option<String> {
+        None
     }
 
     fn format_frontmatter(&self, fm: &FrontMatter) -> String {
