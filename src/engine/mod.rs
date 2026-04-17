@@ -10,7 +10,7 @@ pub use execute::*;
 
 use std::path::PathBuf;
 
-use crate::spec::{AgentName, OnTargetModified, Source};
+use crate::spec::{AgentName, OnTargetModified, Ownership, Source};
 
 /// What the engine intends to do with a single target file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,6 +46,9 @@ pub struct PlannedDeployment {
 #[derive(Debug)]
 pub struct Plan {
     pub items: Vec<PlannedDeployment>,
+    /// Ownership decisions for contested paths, carried forward into the lock
+    /// so the same resolution applies on the next sync.
+    pub owners: Vec<Ownership>,
 }
 
 impl Plan {

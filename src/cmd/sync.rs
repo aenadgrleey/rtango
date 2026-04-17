@@ -14,7 +14,9 @@ pub fn exec(
     let lock = load_lock_or_empty(root)?;
     let plan = compute_plan(root, &spec, &lock, force || adopt)?;
 
-    // If filtering by rule, partition the plan items
+    // If filtering by rule, partition the plan items. Owners are always
+    // carried through whole-spec so a per-rule sync doesn't drop unrelated
+    // ownership decisions.
     let (filtered_plan, is_rule_filtered) = match &rule {
         Some(r) => {
             let filtered_items: Vec<_> = plan
@@ -22,7 +24,13 @@ pub fn exec(
                 .into_iter()
                 .filter(|item| item.rule_id == *r)
                 .collect();
-            (Plan { items: filtered_items }, true)
+            (
+                Plan {
+                    items: filtered_items,
+                    owners: plan.owners,
+                },
+                true,
+            )
         }
         None => (plan, false),
     };

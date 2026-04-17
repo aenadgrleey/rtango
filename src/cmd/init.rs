@@ -75,6 +75,7 @@ pub fn exec(
     let lock = Lock {
         version: 1,
         tracked_agents: agent_names,
+        owners: vec![],
         deployments: vec![],
     };
 

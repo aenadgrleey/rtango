@@ -80,6 +80,7 @@ pub fn execute_plan(
     Ok(Lock {
         version: 1,
         tracked_agents: vec![], // Will be set by caller if needed
+        owners: plan.owners.clone(),
         deployments,
     })
 }

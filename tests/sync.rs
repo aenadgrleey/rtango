@@ -56,6 +56,7 @@ fn empty_lock() -> Lock {
     Lock {
         version: 1,
         tracked_agents: vec![],
+        owners: vec![],
         deployments: vec![],
     }
 }

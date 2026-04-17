@@ -35,6 +35,7 @@ fn empty_lock() -> Lock {
     Lock {
         version: 1,
         tracked_agents: vec![],
+        owners: vec![],
         deployments: vec![],
     }
 }
@@ -534,7 +535,7 @@ fn plan_deploys_to_multiple_agents() {
     setup_copilot_skill(root, "my-skill", "Skill body");
 
     let spec = make_spec(
-        vec!["copilot", "claude-code"],
+        vec!["claude-code", "codex"],
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
@@ -542,8 +543,31 @@ fn plan_deploys_to_multiple_agents() {
 
     assert_eq!(plan.items.len(), 2);
     let paths: Vec<PathBuf> = plan.items.iter().map(|i| i.target_path.clone()).collect();
-    assert!(paths.contains(&PathBuf::from(".github/skills/my-skill/SKILL.md")));
     assert!(paths.contains(&PathBuf::from(".claude/skills/my-skill/SKILL.md")));
+    assert!(paths.contains(&PathBuf::from(".codex/skills/my-skill/SKILL.md")));
+}
+
+#[test]
+fn plan_skips_when_source_equals_target() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "Skill body");
+
+    // copilot source AND copilot target — would round-trip onto itself.
+    let spec = make_spec(
+        vec!["copilot", "claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+
+    // copilot self-write is dropped; only claude-code remains.
+    assert_eq!(plan.items.len(), 1);
+    assert_eq!(plan.items[0].agent, AgentName::new("claude-code"));
+    assert_eq!(
+        plan.items[0].target_path,
+        PathBuf::from(".claude/skills/my-skill/SKILL.md")
+    );
 }
 
 #[test]
@@ -575,4 +599,161 @@ fn full_roundtrip_with_agents() {
     // Second sync — should be up-to-date
     let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
     assert!(plan2.is_clean());
+}
+
+// ── Ownership tests ──────────────────────────────────────────────────
+
+#[test]
+fn single_file_rule_beats_set_for_shared_path() {
+    // Single-file rule writes into a directory that a skill-set rule also
+    // scans. The set must skip the file the single rule owns; otherwise we'd
+    // get "target file exists but is not tracked in lock" conflicts on the
+    // second sync.
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_claude_skill(root, "git-helper", "Git helper body");
+    setup_copilot_skill(root, "other", "Other body");
+
+    let spec = make_spec(
+        vec!["claude-code", "copilot"],
+        vec![
+            single_skill_rule("single", ".claude/skills/git-helper", "claude-code"),
+            skill_set_rule("set", ".github/skills", "copilot"),
+        ],
+    );
+    let lock = empty_lock();
+
+    // First sync: single writes .github/skills/git-helper; set expands to [other].
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let lock1 = execute_plan(root, &plan, &lock, false).unwrap();
+    assert!(root.join(".github/skills/git-helper/SKILL.md").exists());
+    assert!(root.join(".claude/skills/other/SKILL.md").exists());
+
+    // Second sync: set would see git-helper in .github/skills but the single
+    // rule owns it — no conflict, no duplicate deployment.
+    let plan2 = compute_plan(root, &spec, &lock1, false).unwrap();
+    assert!(!plan2.has_conflicts(), "expected no conflicts, got {:?}", plan2.items);
+    assert!(plan2.is_clean(), "second sync should be up-to-date");
+
+    // Set rule must not track git-helper.
+    let set_entries: Vec<_> = lock1
+        .deployments
+        .iter()
+        .filter(|d| d.rule_id == "set")
+        .collect();
+    assert_eq!(set_entries.len(), 1);
+    assert_eq!(
+        set_entries[0].content,
+        PathBuf::from(".claude/skills/other/SKILL.md")
+    );
+}
+
+#[test]
+fn set_vs_set_errors_without_lock_decision() {
+    // Two skill-set rules both claim the same directory. Without a user
+    // decision recorded in the lock, the engine refuses to guess.
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "foo", "Foo body");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![
+            skill_set_rule("a", ".github/skills", "copilot"),
+            skill_set_rule("b", ".github/skills", "copilot"),
+        ],
+    );
+    let lock = empty_lock();
+    let err = compute_plan(root, &spec, &lock, false).unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("ambiguous ownership"), "got: {}", msg);
+    assert!(msg.contains("\"a\""), "got: {}", msg);
+    assert!(msg.contains("\"b\""), "got: {}", msg);
+}
+
+#[test]
+fn set_vs_set_respects_lock_owners_override() {
+    // Given two set rules that both claim a file, a lock entry in `owners:`
+    // picks the winner.
+    use rtango::spec::Ownership;
+
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "foo", "Foo body");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![
+            skill_set_rule("a", ".github/skills", "copilot"),
+            skill_set_rule("b", ".github/skills", "copilot"),
+        ],
+    );
+    let mut lock = empty_lock();
+    lock.owners.push(Ownership {
+        path: root.join(".github/skills/foo/SKILL.md"),
+        rule_id: "a".into(),
+    });
+    lock.owners.push(Ownership {
+        path: root.join(".claude/skills/foo/SKILL.md"),
+        rule_id: "a".into(),
+    });
+
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let foo_items: Vec<_> = plan
+        .items
+        .iter()
+        .filter(|i| i.target_path == PathBuf::from(".claude/skills/foo/SKILL.md"))
+        .collect();
+    assert_eq!(foo_items.len(), 1);
+    assert_eq!(foo_items[0].rule_id, "a");
+
+    // Contested owners survive into the new lock so the decision persists.
+    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
+    assert!(new_lock.owners.iter().any(|o| o.rule_id == "a"));
+}
+
+#[test]
+fn reparented_path_is_not_marked_as_orphan() {
+    // A stale lock entry (rule A, path X) must not appear as an orphan when
+    // the current spec has rule B owning X. The old behavior would emit an
+    // Orphan and the executor would delete the file — which is the file B
+    // now depends on.
+    use rtango::spec::{AgentName, Deployment, Source};
+
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "foo", "Foo body");
+
+    // Lock captures a prior sync where rule "single" owned foo's deployment.
+    let lock = Lock {
+        version: 1,
+        tracked_agents: vec![],
+        owners: vec![],
+        deployments: vec![Deployment {
+            rule_id: "single".into(),
+            agent: AgentName::new("claude-code"),
+            source: Source::Local(PathBuf::from(".github/skills/foo")),
+            source_hash: "deadbeef".into(),
+            content: PathBuf::from(".claude/skills/foo/SKILL.md"),
+            content_hash: "deadbeef".into(),
+        }],
+    };
+
+    // Current spec: rule "set" now owns foo.
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("set", ".github/skills", "copilot")],
+    );
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let orphans: Vec<_> = plan
+        .items
+        .iter()
+        .filter(|i| i.status == DeploymentStatus::Orphan)
+        .collect();
+    assert_eq!(
+        orphans.len(),
+        0,
+        "stale (single,...) lock entry must not become an orphan; got {:?}",
+        orphans
+    );
 }

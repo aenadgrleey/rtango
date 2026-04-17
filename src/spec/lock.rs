@@ -9,8 +9,19 @@ use super::spec::AgentName;
 pub struct Lock {
     pub version: u32,
     pub tracked_agents: Vec<AgentName>,
+    /// Explicit ownership decisions for paths that were claimed by multiple
+    /// rules. Only contested paths appear here; uncontested ones are derivable
+    /// from the spec.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub owners: Vec<Ownership>,
     #[serde(default)]
     pub deployments: Vec<Deployment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Ownership {
+    pub path: PathBuf,
+    pub rule_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,9 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::agent::{self, frontmatter::join_frontmatter};
-use crate::spec::{AgentName, Deployment, Lock, OnTargetModified, Spec};
+use crate::spec::{AgentName, Deployment, Lock, OnTargetModified, Ownership, RuleKind, Spec};
 
 use super::{
     DeploymentStatus, ExpandedItem, ExpandedKind, Plan, PlannedDeployment,
@@ -84,25 +84,88 @@ pub fn compute_plan(
     let default_policy = spec.defaults.on_target_modified;
     let mut items = Vec::new();
 
-    // Track which (rule_id, agent, target_path) combos we produce, for orphan detection
-    let mut seen: HashSet<(String, String, PathBuf)> = HashSet::new();
+    // Phase 1: expand every rule once and collect, for each absolute path that
+    // would be touched (source file of an expanded item, or target path of a
+    // rendered item), the set of rules that claim it.
+    let expansions: Vec<Vec<ExpandedItem>> = spec
+        .rules
+        .iter()
+        .map(|r| expand_rule(root, r))
+        .collect::<anyhow::Result<_>>()?;
 
-    for rule in &spec.rules {
-        let expanded = expand_rule(root, rule)?;
+    let mut candidates: HashMap<PathBuf, HashSet<String>> = HashMap::new();
+    for (rule, expanded) in spec.rules.iter().zip(expansions.iter()) {
+        for item in expanded {
+            let source_file = match &item.kind {
+                ExpandedKind::Skill(s) => s.file.clone(),
+                ExpandedKind::Agent(a) => a.file.clone(),
+            };
+            candidates.entry(source_file).or_default().insert(rule.id.clone());
+            for target_agent in &spec.agents {
+                let tp = root.join(target_path_for(target_agent, &item.kind)?);
+                candidates.entry(tp).or_default().insert(rule.id.clone());
+            }
+        }
+    }
+
+    // Phase 2: resolve ownership for every touched path.
+    let owners = resolve_owners(spec, &candidates, lock)?;
+
+    // Keep only contested resolutions in the lock (uncontested ones are
+    // derivable from the spec).
+    let contested_owners: Vec<Ownership> = candidates
+        .iter()
+        .filter(|(_, cs)| cs.len() > 1)
+        .filter_map(|(path, _)| {
+            owners.get(path).map(|rule_id| Ownership {
+                path: path.clone(),
+                rule_id: rule_id.clone(),
+            })
+        })
+        .collect();
+
+    // Track which (rule_id, agent, target_path) combos we produce, for orphan detection.
+    let mut seen: HashSet<(String, String, PathBuf)> = HashSet::new();
+    // Track every absolute target path produced, to distinguish real orphans
+    // (lock entries for paths nobody writes) from reparented paths (now owned
+    // by a different rule and still live).
+    let mut produced: HashSet<PathBuf> = HashSet::new();
+
+    for (rule, expanded) in spec.rules.iter().zip(expansions.iter()) {
         let policy = effective_policy(rule.on_target_modified, default_policy);
 
-        for exp_item in &expanded {
+        for exp_item in expanded {
+            let source_file = match &exp_item.kind {
+                ExpandedKind::Skill(s) => &s.file,
+                ExpandedKind::Agent(a) => &a.file,
+            };
+            // Only process items whose source path this rule owns.
+            if owners.get(source_file).map(String::as_str) != Some(rule.id.as_str()) {
+                continue;
+            }
+
             for target_agent in &spec.agents {
                 let rendered = render_for_agent(root, exp_item, &rule.schema_agent, target_agent)?;
+                let abs_target = root.join(&rendered.target_path);
+
+                // Skip self-writes: writer round-tripping its own source file.
+                if source_file == &abs_target {
+                    continue;
+                }
+                // Only render targets this rule owns.
+                if owners.get(&abs_target).map(String::as_str) != Some(rule.id.as_str()) {
+                    continue;
+                }
+
                 seen.insert((
                     rendered.rule_id.clone(),
                     rendered.agent.0.clone(),
                     rendered.target_path.clone(),
                 ));
+                produced.insert(abs_target.clone());
 
                 let lock_entry = find_lock_entry(lock, &rendered.rule_id, &rendered.agent, &rendered.target_path);
-                let disk_path = root.join(&rendered.target_path);
-                let disk_content = fs::read_to_string(&disk_path).ok();
+                let disk_content = fs::read_to_string(&abs_target).ok();
                 let disk_hash = disk_content.as_deref().map(hash_content);
 
                 let status = compute_status(
@@ -127,23 +190,110 @@ pub fn compute_plan(
         }
     }
 
-    // Orphan detection: lock entries not present in seen
+    // Orphan detection. A lock entry is truly orphaned only if the current
+    // spec no longer produces it AND no other rule now owns the path. The
+    // second check keeps us from deleting a file that was simply reparented
+    // to a different rule (e.g. a set rule's old entry for a file that a
+    // single-file rule now owns).
     for dep in &lock.deployments {
         let key = (dep.rule_id.clone(), dep.agent.0.clone(), dep.content.clone());
-        if !seen.contains(&key) {
-            items.push(PlannedDeployment {
-                rule_id: dep.rule_id.clone(),
-                agent: dep.agent.clone(),
-                source: dep.source.clone(),
-                source_hash: dep.source_hash.clone(),
-                target_path: dep.content.clone(),
-                rendered_content: String::new(),
-                status: DeploymentStatus::Orphan,
-            });
+        if seen.contains(&key) {
+            continue;
         }
+        let abs = root.join(&dep.content);
+        if produced.contains(&abs) || owners.contains_key(&abs) {
+            continue;
+        }
+        items.push(PlannedDeployment {
+            rule_id: dep.rule_id.clone(),
+            agent: dep.agent.clone(),
+            source: dep.source.clone(),
+            source_hash: dep.source_hash.clone(),
+            target_path: dep.content.clone(),
+            rendered_content: String::new(),
+            status: DeploymentStatus::Orphan,
+        });
     }
 
-    Ok(Plan { items })
+    Ok(Plan {
+        items,
+        owners: contested_owners,
+    })
+}
+
+/// Pick one rule to own each path. Single claimant → auto. Multiple claimants
+/// → use lock-recorded decision if valid; otherwise heuristic (single-file
+/// rules beat set rules). Set-vs-set with no lock entry errors out so the
+/// user can record an explicit decision.
+fn resolve_owners(
+    spec: &Spec,
+    candidates: &HashMap<PathBuf, HashSet<String>>,
+    lock: &Lock,
+) -> anyhow::Result<HashMap<PathBuf, String>> {
+    let rule_kinds: HashMap<&str, &RuleKind> = spec
+        .rules
+        .iter()
+        .map(|r| (r.id.as_str(), &r.kind))
+        .collect();
+    let lock_owners: HashMap<&Path, &str> = lock
+        .owners
+        .iter()
+        .map(|o| (o.path.as_path(), o.rule_id.as_str()))
+        .collect();
+
+    let mut resolved: HashMap<PathBuf, String> = HashMap::new();
+    for (path, claimants) in candidates {
+        if claimants.len() == 1 {
+            let rule_id = claimants.iter().next().unwrap().clone();
+            resolved.insert(path.clone(), rule_id);
+            continue;
+        }
+
+        // Multiple claimants. First, honor any user decision from the lock.
+        if let Some(&locked) = lock_owners.get(path.as_path()) {
+            if claimants.contains(locked) {
+                resolved.insert(path.clone(), locked.to_string());
+                continue;
+            }
+            // Lock points at a rule that no longer claims this path; fall
+            // through to heuristic.
+        }
+
+        // Heuristic: a single-file rule is strictly more specific than a set.
+        let singles: Vec<&String> = claimants
+            .iter()
+            .filter(|r| matches!(
+                rule_kinds.get(r.as_str()),
+                Some(RuleKind::Skill {}) | Some(RuleKind::Agent {})
+            ))
+            .collect();
+        match singles.len() {
+            0 => {}
+            1 => {
+                resolved.insert(path.clone(), singles[0].clone());
+                continue;
+            }
+            _ => {
+                let mut names: Vec<&str> = singles.iter().map(|s| s.as_str()).collect();
+                names.sort();
+                anyhow::bail!(
+                    "ambiguous ownership for {}: single-file rules {:?} both claim this path",
+                    path.display(),
+                    names
+                );
+            }
+        }
+
+        let mut names: Vec<&str> = claimants.iter().map(String::as_str).collect();
+        names.sort();
+        anyhow::bail!(
+            "ambiguous ownership for {}: rules {:?} all claim this path. \
+             Record a decision in .rtango/lock.yaml under `owners:` or narrow the spec.",
+            path.display(),
+            names
+        );
+    }
+    Ok(resolved)
 }
 
 fn compute_status(

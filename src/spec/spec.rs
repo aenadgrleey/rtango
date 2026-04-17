@@ -52,6 +52,7 @@ pub struct Rule {
     pub id: String,
     pub source: Source,
     pub schema_agent: AgentName,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_target_modified: Option<OnTargetModified>,
     #[serde(flatten)]
     pub kind: RuleKind,

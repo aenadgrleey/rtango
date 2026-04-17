@@ -73,6 +73,7 @@ pub fn load_lock_or_empty(root: &Path) -> anyhow::Result<Lock> {
         return Ok(Lock {
             version: 1,
             tracked_agents: vec![],
+            owners: vec![],
             deployments: vec![],
         });
     }

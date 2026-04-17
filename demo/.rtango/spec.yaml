@@ -1,0 +1,36 @@
+version: 1
+agents:
+  - claude-code
+  - copilot
+defaults:
+  on_target_modified: fail
+rules:
+  # copilot → claude-code: skill set authored in copilot's .github/skills/.
+  # The copilot self-target is auto-skipped because source path == target path.
+  - id: local-copilot-skills
+    source: .github/skills/
+    schema_agent: copilot
+    kind: skill-set
+
+  # claude-code → copilot: single skill authored in claude-code's .claude/skills/.
+  # The claude-code self-target is auto-skipped.
+  - id: local-claude-skill
+    source: .claude/skills/git-helper
+    schema_agent: claude-code
+    kind: skill
+
+  # copilot → claude-code: agent set authored in .github/agents/.
+  - id: local-copilot-agents
+    source: .github/agents/
+    schema_agent: copilot
+    kind: agent-set
+
+  # Remote skill pinned to an immutable commit. Renders to both target agents
+  # since the source lives in the cache (no path collision possible).
+  - id: upstream-code-review
+    source:
+      github: addyosmani/agent-skills
+      ref: 9534f44c5448086fcc0046f9d83752c654c81930
+      path: skills/code-review-and-quality
+    schema_agent: claude-code
+    kind: skill
