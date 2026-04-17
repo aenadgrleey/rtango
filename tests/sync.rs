@@ -215,6 +215,95 @@ fn rule_filter_only_processes_matching_rule() {
     assert!(has_beta, "lock should contain rule-beta");
 }
 
+fn system_rule(id: &str, path: &str, schema: &str) -> Rule {
+    Rule {
+        id: id.to_string(),
+        source: Source::Local(PathBuf::from(path)),
+        schema_agent: AgentName::new(schema),
+        on_target_modified: None,
+        kind: RuleKind::System,
+    }
+}
+
+#[test]
+fn system_file_syncs_per_agent_convention_paths() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    // Source is a single markdown file with no frontmatter.
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("docs/INSTRUCTIONS.md"), "# House rules\n\nBe terse.\n").unwrap();
+
+    let spec = make_spec(
+        vec!["claude-code", "codex", "copilot"],
+        vec![system_rule("instructions", "docs/INSTRUCTIONS.md", "claude-code")],
+    );
+    write_spec(root, &spec);
+
+    rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
+
+    // Each agent gets its own convention path with verbatim content.
+    let claude = fs::read_to_string(root.join("CLAUDE.md")).unwrap();
+    let codex = fs::read_to_string(root.join("AGENTS.md")).unwrap();
+    let copilot = fs::read_to_string(root.join(".github/copilot-instructions.md")).unwrap();
+
+    let expected = "# House rules\n\nBe terse.\n";
+    assert_eq!(claude, expected);
+    assert_eq!(codex, expected);
+    assert_eq!(copilot, expected);
+
+    // No frontmatter was injected.
+    assert!(!claude.starts_with("---"));
+    assert!(!codex.starts_with("---"));
+    assert!(!copilot.starts_with("---"));
+
+    let lock = load_lock(root).unwrap();
+    assert_eq!(lock.deployments.len(), 3);
+}
+
+#[test]
+fn system_file_handles_agents_sharing_target_path() {
+    // codex and opencode both write to AGENTS.md — must not conflict.
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    fs::write(root.join("source.md"), "shared body\n").unwrap();
+    let spec = make_spec(
+        vec!["codex", "opencode"],
+        vec![system_rule("sys", "source.md", "codex")],
+    );
+    write_spec(root, &spec);
+
+    rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
+    assert_eq!(
+        fs::read_to_string(root.join("AGENTS.md")).unwrap(),
+        "shared body\n"
+    );
+
+    // Re-sync stays clean despite two lock entries pointing at the same path.
+    rtango::cmd::sync::exec(root, true, false, None, false).unwrap();
+
+    let lock = load_lock(root).unwrap();
+    assert_eq!(lock.deployments.len(), 2);
+}
+
+#[test]
+fn system_file_resync_is_clean_after_first_sync() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    fs::write(root.join("source.md"), "body\n").unwrap();
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![system_rule("sys", "source.md", "claude-code")],
+    );
+    write_spec(root, &spec);
+
+    rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
+    // Re-running in --check mode must succeed (idempotent).
+    rtango::cmd::sync::exec(root, true, false, None, false).unwrap();
+}
+
 #[test]
 fn adopt_mode_adopts_existing_files() {
     let tmp = TempDir::new().unwrap();

@@ -89,14 +89,14 @@ pub enum Command {
         /// Kind is a single skill
         #[arg(
             long = "skill",
-            conflicts_with_all = ["agent", "skill_set", "agent_set"]
+            conflicts_with_all = ["agent", "skill_set", "agent_set", "system"]
         )]
         skill: bool,
 
         /// Kind is a single agent
         #[arg(
             long = "agent",
-            conflicts_with_all = ["skill", "skill_set", "agent_set"]
+            conflicts_with_all = ["skill", "skill_set", "agent_set", "system"]
         )]
         agent: bool,
 
@@ -104,7 +104,7 @@ pub enum Command {
         #[arg(
             long = "skill-set",
             visible_alias = "ss",
-            conflicts_with_all = ["skill", "agent", "agent_set"]
+            conflicts_with_all = ["skill", "agent", "agent_set", "system"]
         )]
         skill_set: bool,
 
@@ -112,9 +112,19 @@ pub enum Command {
         #[arg(
             long = "agent-set",
             visible_alias = "as",
-            conflicts_with_all = ["skill", "agent", "skill_set"]
+            conflicts_with_all = ["skill", "agent", "skill_set", "system"]
         )]
         agent_set: bool,
+
+        /// Kind is a system instruction file (CLAUDE.md / AGENTS.md / etc.)
+        #[arg(
+            long = "system",
+            conflicts_with_all = [
+                "skill", "agent", "skill_set", "agent_set",
+                "name", "description", "allowed_tools", "include", "exclude",
+            ]
+        )]
+        system: bool,
 
         /// Schema agent for the rule (required when spec has >1 agent)
         #[arg(short = 'g', long = "schema", value_name = "AGENT")]
@@ -177,6 +187,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             agent,
             skill_set,
             agent_set,
+            system,
             schema,
             name,
             description,
@@ -193,6 +204,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
                 agent,
                 skill_set,
                 agent_set,
+                system,
                 schema,
                 name,
                 description,

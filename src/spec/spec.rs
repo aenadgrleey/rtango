@@ -89,6 +89,10 @@ pub enum RuleKind {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         exclude: Vec<String>,
     },
+    /// A single root-level instruction file (CLAUDE.md, AGENTS.md, etc.).
+    /// Source is one markdown file, written verbatim to the per-agent
+    /// convention path with no frontmatter rewriting.
+    System,
 }
 
 impl RuleKind {
@@ -103,5 +107,8 @@ impl RuleKind {
     }
     pub fn agent_set() -> Self {
         RuleKind::AgentSet { include: Vec::new(), exclude: Vec::new() }
+    }
+    pub fn system() -> Self {
+        RuleKind::System
     }
 }

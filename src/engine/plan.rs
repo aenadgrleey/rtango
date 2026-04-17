@@ -12,6 +12,9 @@ use super::{
 
 /// Compute the target path for a rendered item based on the target agent.
 fn target_path_for(agent: &AgentName, kind: &ExpandedKind) -> anyhow::Result<PathBuf> {
+    if let ExpandedKind::System(_) = kind {
+        return system_file_path_for(agent);
+    }
     let dir = match agent.as_str() {
         "copilot" => ".github",
         "claude-code" => ".claude",
@@ -23,7 +26,20 @@ fn target_path_for(agent: &AgentName, kind: &ExpandedKind) -> anyhow::Result<Pat
     match kind {
         ExpandedKind::Skill(s) => Ok(PathBuf::from(format!("{dir}/skills/{}/SKILL.md", s.name))),
         ExpandedKind::Agent(a) => Ok(PathBuf::from(format!("{dir}/agents/{}.agent.md", a.name))),
+        ExpandedKind::System(_) => unreachable!("handled above"),
     }
+}
+
+/// Convention path for the per-agent root instruction file.
+fn system_file_path_for(agent: &AgentName) -> anyhow::Result<PathBuf> {
+    Ok(match agent.as_str() {
+        "copilot" => PathBuf::from(".github/copilot-instructions.md"),
+        "claude-code" => PathBuf::from("CLAUDE.md"),
+        "codex" => PathBuf::from("AGENTS.md"),
+        "pi" => PathBuf::from("AGENTS.md"),
+        "opencode" => PathBuf::from("AGENTS.md"),
+        other => anyhow::bail!("unknown target agent: {}", other),
+    })
 }
 
 /// Render an expanded item for a specific target agent.
@@ -33,19 +49,23 @@ pub fn render_for_agent(
     _schema_agent: &AgentName,
     target_agent: &AgentName,
 ) -> anyhow::Result<RenderedTarget> {
-    let writer = agent::frontmatter_writer(target_agent)
-        .ok_or_else(|| anyhow::anyhow!("unknown target agent: {}", target_agent))?;
-
-    let (fm, body) = match &item.kind {
-        ExpandedKind::Skill(s) => (&s.front_matter, &s.body),
-        ExpandedKind::Agent(a) => (&a.front_matter, &a.body),
-    };
-
-    let yaml = writer.format_frontmatter(fm);
-    let content = if yaml.is_empty() {
-        body.clone()
-    } else {
-        join_frontmatter(&yaml, body)
+    let content = match &item.kind {
+        ExpandedKind::System(s) => s.body.clone(),
+        ExpandedKind::Skill(_) | ExpandedKind::Agent(_) => {
+            let writer = agent::frontmatter_writer(target_agent)
+                .ok_or_else(|| anyhow::anyhow!("unknown target agent: {}", target_agent))?;
+            let (fm, body) = match &item.kind {
+                ExpandedKind::Skill(s) => (&s.front_matter, &s.body),
+                ExpandedKind::Agent(a) => (&a.front_matter, &a.body),
+                ExpandedKind::System(_) => unreachable!("handled above"),
+            };
+            let yaml = writer.format_frontmatter(fm);
+            if yaml.is_empty() {
+                body.clone()
+            } else {
+                join_frontmatter(&yaml, body)
+            }
+        }
     };
 
     let target_path = target_path_for(target_agent, &item.kind)?;
@@ -139,6 +159,7 @@ pub fn compute_plan(
             let source_file = match &exp_item.kind {
                 ExpandedKind::Skill(s) => &s.file,
                 ExpandedKind::Agent(a) => &a.file,
+                ExpandedKind::System(s) => &s.file,
             };
             // Only process items whose source path this rule owns.
             if owners.get(source_file).map(String::as_str) != Some(rule.id.as_str()) {
@@ -283,7 +304,7 @@ fn resolve_one(
         .iter()
         .filter(|r| matches!(
             rule_kinds.get(r.as_str()),
-            Some(RuleKind::Skill { .. }) | Some(RuleKind::Agent { .. })
+            Some(RuleKind::Skill { .. }) | Some(RuleKind::Agent { .. }) | Some(RuleKind::System)
         ))
         .collect();
     match singles.len() {
@@ -354,6 +375,7 @@ fn collect_candidates(
             let source_file = match &item.kind {
                 ExpandedKind::Skill(s) => s.file.clone(),
                 ExpandedKind::Agent(a) => a.file.clone(),
+                ExpandedKind::System(s) => s.file.clone(),
             };
             candidates.entry(source_file).or_default().insert(rule.id.clone());
             for target_agent in &spec.agents {

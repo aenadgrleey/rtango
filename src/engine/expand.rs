@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::agent::{self, frontmatter::{FrontMatter, FrontMatterMapper, split_frontmatter, tokenize_tools}};
 use crate::spec::{Rule, RuleKind, Source};
 
-use super::{ExpandedItem, ExpandedKind, fetch_github, hash_content};
+use super::{ExpandedItem, ExpandedKind, SystemFile, fetch_github, hash_content};
 
 /// Expand a single rule into its constituent items by reading source files.
 ///
@@ -26,6 +26,7 @@ pub fn expand_rule(root: &Path, rule: &Rule) -> anyhow::Result<Vec<ExpandedItem>
         RuleKind::Agent { name, description, allowed_tools } => {
             expand_single_agent(rule, &abs_path, name.as_deref(), description.as_deref(), allowed_tools.as_deref())
         }
+        RuleKind::System => expand_single_system(rule, &abs_path),
     }
 }
 
@@ -188,6 +189,25 @@ fn expand_single_skill(
         source_content: content,
         source_hash: hash,
         kind: ExpandedKind::Skill(skill),
+    }])
+}
+
+fn expand_single_system(rule: &Rule, abs_path: &Path) -> anyhow::Result<Vec<ExpandedItem>> {
+    if !abs_path.is_file() {
+        anyhow::bail!("system file not found: {}", abs_path.display());
+    }
+    let content = fs::read_to_string(abs_path)?;
+    let hash = hash_content(&content);
+    let system = SystemFile {
+        file: abs_path.to_path_buf(),
+        body: content.clone(),
+    };
+    Ok(vec![ExpandedItem {
+        rule_id: rule.id.clone(),
+        source: rule.source.clone(),
+        source_content: content,
+        source_hash: hash,
+        kind: ExpandedKind::System(system),
     }])
 }
 

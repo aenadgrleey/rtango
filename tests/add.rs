@@ -354,6 +354,29 @@ fn add_agent_set_stores_exclude() {
 }
 
 #[test]
+fn add_system_kind_persists_with_no_extra_fields() {
+    let tmp = TempDir::new().unwrap();
+    write_spec(tmp.path(), &empty_spec(&["claude-code"]));
+
+    rtango::cmd::add::exec(
+        tmp.path(),
+        AddOptions {
+            id: "instructions".into(),
+            local: Some(PathBuf::from("docs/CLAUDE.md")),
+            system: true,
+            ..AddOptions::default()
+        },
+    )
+    .unwrap();
+
+    let spec = load_spec(tmp.path()).unwrap();
+    assert!(matches!(spec.rules[0].kind, RuleKind::System));
+
+    let yaml = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
+    assert!(yaml.contains("kind: system"), "yaml: {}", yaml);
+}
+
+#[test]
 fn add_rejects_multiple_kinds() {
     let tmp = TempDir::new().unwrap();
     write_spec(tmp.path(), &empty_spec(&["claude-code"]));

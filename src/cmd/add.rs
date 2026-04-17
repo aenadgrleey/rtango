@@ -18,6 +18,7 @@ pub struct AddOptions {
     pub agent: bool,
     pub skill_set: bool,
     pub agent_set: bool,
+    pub system: bool,
     pub schema: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
@@ -35,30 +36,31 @@ pub fn exec(root: &Path, opts: AddOptions) -> anyhow::Result<()> {
         (None, None) => anyhow::bail!("source required: pass --local/-l PATH or --repo/-r SPEC"),
     };
 
-    let kind = match (opts.skill, opts.agent, opts.skill_set, opts.agent_set) {
-        (true, false, false, false) => RuleKind::Skill {
+    let kind = match (opts.skill, opts.agent, opts.skill_set, opts.agent_set, opts.system) {
+        (true, false, false, false, false) => RuleKind::Skill {
             name: opts.name,
             description: opts.description,
             allowed_tools: opts.allowed_tools,
         },
-        (false, true, false, false) => RuleKind::Agent {
+        (false, true, false, false, false) => RuleKind::Agent {
             name: opts.name,
             description: opts.description,
             allowed_tools: opts.allowed_tools,
         },
-        (false, false, true, false) => RuleKind::SkillSet {
+        (false, false, true, false, false) => RuleKind::SkillSet {
             include: opts.include,
             exclude: opts.exclude,
         },
-        (false, false, false, true) => RuleKind::AgentSet {
+        (false, false, false, true, false) => RuleKind::AgentSet {
             include: opts.include,
             exclude: opts.exclude,
         },
-        (false, false, false, false) => anyhow::bail!(
-            "kind required: pass --skill, --agent, --skill-set/--ss, or --agent-set/--as"
+        (false, false, false, false, true) => RuleKind::System,
+        (false, false, false, false, false) => anyhow::bail!(
+            "kind required: pass --skill, --agent, --skill-set/--ss, --agent-set/--as, or --system"
         ),
         _ => anyhow::bail!(
-            "pass only one kind of --skill, --agent, --skill-set/--ss, or --agent-set/--as"
+            "pass only one kind of --skill, --agent, --skill-set/--ss, --agent-set/--as, or --system"
         ),
     };
 

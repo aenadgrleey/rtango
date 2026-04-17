@@ -83,6 +83,15 @@ pub struct ExpandedItem {
 pub enum ExpandedKind {
     Skill(crate::agent::Skill),
     Agent(crate::agent::Agent),
+    System(SystemFile),
+}
+
+/// A single root-level instruction file (CLAUDE.md / AGENTS.md / etc.).
+/// Source content is written verbatim — no frontmatter parsing or rewriting.
+#[derive(Debug, Clone)]
+pub struct SystemFile {
+    pub file: PathBuf,
+    pub body: String,
 }
 
 /// Produced by rendering an ExpandedItem for a specific target agent.
