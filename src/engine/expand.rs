@@ -1,0 +1,137 @@
+use std::fs;
+use std::path::Path;
+
+use crate::agent::{self, frontmatter::{FrontMatter, split_frontmatter}};
+use crate::spec::{Rule, RuleKind, Source};
+
+use super::{ExpandedItem, ExpandedKind, hash_content};
+
+/// Expand a single rule into its constituent items by reading source files.
+///
+/// - `Skill` / `Agent`: produces one item (single file).
+/// - `SkillSet` / `AgentSet`: produces N items (one per source file in the directory).
+pub fn expand_rule(root: &Path, rule: &Rule) -> anyhow::Result<Vec<ExpandedItem>> {
+    let Source::Local(ref rel_path) = rule.source;
+    let abs_path = root.join(rel_path);
+
+    match &rule.kind {
+        RuleKind::SkillSet {} => expand_skill_set(root, rule, &abs_path),
+        RuleKind::AgentSet {} => expand_agent_set(root, rule, &abs_path),
+        RuleKind::Skill {} => expand_single_skill(rule, &abs_path),
+        RuleKind::Agent {} => expand_single_agent(rule, &abs_path),
+    }
+}
+
+fn expand_skill_set(root: &Path, rule: &Rule, abs_path: &Path) -> anyhow::Result<Vec<ExpandedItem>> {
+    let parser = agent::skills_parser(&rule.schema_agent)
+        .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", rule.schema_agent))?;
+    let skills = parser.parse_skills(root)?;
+    let mut items = Vec::new();
+    for skill in &skills {
+        if !skill.dir.starts_with(abs_path) {
+            continue;
+        }
+        let content = fs::read_to_string(&skill.file)?;
+        let hash = hash_content(&content);
+        items.push(ExpandedItem {
+            rule_id: rule.id.clone(),
+            source: rule.source.clone(),
+            source_content: content,
+            source_hash: hash,
+            kind: ExpandedKind::Skill(skill.clone()),
+        });
+    }
+    Ok(items)
+}
+
+fn expand_agent_set(root: &Path, rule: &Rule, abs_path: &Path) -> anyhow::Result<Vec<ExpandedItem>> {
+    let parser = agent::agents_parser(&rule.schema_agent)
+        .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", rule.schema_agent))?;
+    let agents = parser.parse_agents(root)?;
+    let mut items = Vec::new();
+    for ag in &agents {
+        if !ag.file.starts_with(abs_path) {
+            continue;
+        }
+        let content = fs::read_to_string(&ag.file)?;
+        let hash = hash_content(&content);
+        items.push(ExpandedItem {
+            rule_id: rule.id.clone(),
+            source: rule.source.clone(),
+            source_content: content,
+            source_hash: hash,
+            kind: ExpandedKind::Agent(ag.clone()),
+        });
+    }
+    Ok(items)
+}
+
+fn expand_single_skill(rule: &Rule, abs_path: &Path) -> anyhow::Result<Vec<ExpandedItem>> {
+    let mapper = agent::frontmatter_mapper(&rule.schema_agent)
+        .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", rule.schema_agent))?;
+
+    let skill_file = abs_path.join("SKILL.md");
+    if !skill_file.is_file() {
+        anyhow::bail!("skill file not found: {}", skill_file.display());
+    }
+    let name = abs_path.file_name()
+        .ok_or_else(|| anyhow::anyhow!("skill path has no name"))?
+        .to_string_lossy()
+        .into_owned();
+    let content = fs::read_to_string(&skill_file)?;
+    let (yaml, body) = split_frontmatter(&content);
+    let front_matter = match yaml {
+        Some(y) => mapper.parse_frontmatter(y)?,
+        None => FrontMatter::default(),
+    };
+    let hash = hash_content(&content);
+    let skill = crate::agent::Skill {
+        name,
+        dir: abs_path.to_path_buf(),
+        file: skill_file,
+        front_matter,
+        body: body.to_string(),
+    };
+    Ok(vec![ExpandedItem {
+        rule_id: rule.id.clone(),
+        source: rule.source.clone(),
+        source_content: content,
+        source_hash: hash,
+        kind: ExpandedKind::Skill(skill),
+    }])
+}
+
+fn expand_single_agent(rule: &Rule, abs_path: &Path) -> anyhow::Result<Vec<ExpandedItem>> {
+    let mapper = agent::frontmatter_mapper(&rule.schema_agent)
+        .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", rule.schema_agent))?;
+
+    if !abs_path.is_file() {
+        anyhow::bail!("agent file not found: {}", abs_path.display());
+    }
+    let file_name = abs_path.file_name()
+        .ok_or_else(|| anyhow::anyhow!("agent path has no file name"))?
+        .to_string_lossy();
+    let agent_name = file_name.strip_suffix(".agent.md")
+        .ok_or_else(|| anyhow::anyhow!("agent file must end with .agent.md: {}", file_name))?
+        .to_owned();
+    let content = fs::read_to_string(abs_path)?;
+    let (yaml, body) = split_frontmatter(&content);
+    let front_matter = match yaml {
+        Some(y) => mapper.parse_frontmatter(y)?,
+        None => FrontMatter::default(),
+    };
+    let hash = hash_content(&content);
+    let agent = crate::agent::Agent {
+        name: agent_name,
+        file: abs_path.to_path_buf(),
+        front_matter,
+        body: body.to_string(),
+    };
+    Ok(vec![ExpandedItem {
+        rule_id: rule.id.clone(),
+        source: rule.source.clone(),
+        source_content: content,
+        source_hash: hash,
+        kind: ExpandedKind::Agent(agent),
+    }])
+}

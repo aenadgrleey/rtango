@@ -1,0 +1,578 @@
+use std::fs;
+use std::path::PathBuf;
+
+use tempfile::TempDir;
+
+use rtango::engine::{
+    DeploymentStatus, ExpandedKind, Plan,
+    compute_plan, execute_plan, expand_rule, hash_content, render_for_agent,
+};
+use rtango::spec::{
+    AgentName, Defaults, Deployment, Lock, OnTargetModified, Rule, RuleKind, Source, Spec,
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+fn setup_copilot_skill(root: &std::path::Path, name: &str, body: &str) {
+    let dir = root.join(format!(".github/skills/{}", name));
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("SKILL.md"), body).unwrap();
+}
+
+fn setup_copilot_agent(root: &std::path::Path, name: &str, body: &str) {
+    let dir = root.join(".github/agents");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join(format!("{}.agent.md", name)), body).unwrap();
+}
+
+fn setup_claude_skill(root: &std::path::Path, name: &str, body: &str) {
+    let dir = root.join(format!(".claude/skills/{}", name));
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("SKILL.md"), body).unwrap();
+}
+
+fn empty_lock() -> Lock {
+    Lock {
+        version: 1,
+        tracked_agents: vec![],
+        deployments: vec![],
+    }
+}
+
+fn make_spec(agents: Vec<&str>, rules: Vec<Rule>) -> Spec {
+    Spec {
+        version: 1,
+        agents: agents.into_iter().map(AgentName::new).collect(),
+        defaults: Defaults::default(),
+        rules,
+    }
+}
+
+fn skill_set_rule(id: &str, path: &str, schema: &str) -> Rule {
+    Rule {
+        id: id.to_string(),
+        source: Source::Local(PathBuf::from(path)),
+        schema_agent: AgentName::new(schema),
+        on_target_modified: None,
+        kind: RuleKind::SkillSet {},
+    }
+}
+
+fn agent_set_rule(id: &str, path: &str, schema: &str) -> Rule {
+    Rule {
+        id: id.to_string(),
+        source: Source::Local(PathBuf::from(path)),
+        schema_agent: AgentName::new(schema),
+        on_target_modified: None,
+        kind: RuleKind::AgentSet {},
+    }
+}
+
+fn single_skill_rule(id: &str, path: &str, schema: &str) -> Rule {
+    Rule {
+        id: id.to_string(),
+        source: Source::Local(PathBuf::from(path)),
+        schema_agent: AgentName::new(schema),
+        on_target_modified: None,
+        kind: RuleKind::Skill {},
+    }
+}
+
+fn single_agent_rule(id: &str, path: &str, schema: &str) -> Rule {
+    Rule {
+        id: id.to_string(),
+        source: Source::Local(PathBuf::from(path)),
+        schema_agent: AgentName::new(schema),
+        on_target_modified: None,
+        kind: RuleKind::Agent {},
+    }
+}
+
+// ── expand_rule tests ────────────────────────────────────────────────
+
+#[test]
+fn expand_skill_set_finds_all_skills() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "alpha", "Alpha body");
+    setup_copilot_skill(root, "beta", "Beta body");
+
+    let rule = skill_set_rule("skills", ".github/skills", "copilot");
+    let items = expand_rule(root, &rule).unwrap();
+
+    assert_eq!(items.len(), 2);
+    let names: Vec<&str> = items.iter().map(|i| match &i.kind {
+        ExpandedKind::Skill(s) => s.name.as_str(),
+        _ => panic!("expected skill"),
+    }).collect();
+    assert!(names.contains(&"alpha"));
+    assert!(names.contains(&"beta"));
+}
+
+#[test]
+fn expand_agent_set_finds_all_agents() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_agent(root, "reviewer", "Review stuff");
+    setup_copilot_agent(root, "planner", "Plan stuff");
+
+    let rule = agent_set_rule("agents", ".github/agents", "copilot");
+    let items = expand_rule(root, &rule).unwrap();
+
+    assert_eq!(items.len(), 2);
+    let names: Vec<&str> = items.iter().map(|i| match &i.kind {
+        ExpandedKind::Agent(a) => a.name.as_str(),
+        _ => panic!("expected agent"),
+    }).collect();
+    assert!(names.contains(&"reviewer"));
+    assert!(names.contains(&"planner"));
+}
+
+#[test]
+fn expand_single_skill() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "---\nname: My Skill\n---\nHello world");
+
+    let rule = single_skill_rule("s1", ".github/skills/my-skill", "copilot");
+    let items = expand_rule(root, &rule).unwrap();
+
+    assert_eq!(items.len(), 1);
+    match &items[0].kind {
+        ExpandedKind::Skill(s) => {
+            assert_eq!(s.name, "my-skill");
+            assert_eq!(s.body, "Hello world");
+        }
+        _ => panic!("expected skill"),
+    }
+}
+
+#[test]
+fn expand_single_agent() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_agent(root, "helper", "---\nname: Helper\n---\nDoes helpful things");
+
+    let rule = single_agent_rule("a1", ".github/agents/helper.agent.md", "copilot");
+    let items = expand_rule(root, &rule).unwrap();
+
+    assert_eq!(items.len(), 1);
+    match &items[0].kind {
+        ExpandedKind::Agent(a) => {
+            assert_eq!(a.name, "helper");
+            assert_eq!(a.body, "Does helpful things");
+        }
+        _ => panic!("expected agent"),
+    }
+}
+
+// ── render_for_agent tests ───────────────────────────────────────────
+
+#[test]
+fn render_skill_for_claude_code() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "deploy", "---\nname: Deploy\n---\nDeploy instructions");
+
+    let rule = single_skill_rule("s1", ".github/skills/deploy", "copilot");
+    let items = expand_rule(root, &rule).unwrap();
+    let item = &items[0];
+
+    let target = AgentName::new("claude-code");
+    let rendered = render_for_agent(root, item, &AgentName::new("copilot"), &target).unwrap();
+
+    assert_eq!(rendered.target_path, PathBuf::from(".claude/skills/deploy/SKILL.md"));
+    assert!(rendered.content.contains("Deploy instructions"));
+    assert!(!rendered.content_hash.is_empty());
+}
+
+#[test]
+fn render_agent_for_copilot() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_claude_skill(root, "test-skill", "Body only");
+
+    // Set up a claude-code agent
+    let agents_dir = root.join(".claude/agents");
+    fs::create_dir_all(&agents_dir).unwrap();
+    fs::write(agents_dir.join("reviewer.agent.md"), "---\nname: Reviewer\n---\nReview code").unwrap();
+
+    let rule = single_agent_rule("a1", ".claude/agents/reviewer.agent.md", "claude-code");
+    let items = expand_rule(root, &rule).unwrap();
+    let item = &items[0];
+
+    let target = AgentName::new("copilot");
+    let rendered = render_for_agent(root, item, &AgentName::new("claude-code"), &target).unwrap();
+
+    assert_eq!(rendered.target_path, PathBuf::from(".github/agents/reviewer.agent.md"));
+    assert!(rendered.content.contains("Review code"));
+}
+
+// ── compute_plan tests ───────────────────────────────────────────────
+
+#[test]
+fn plan_create_when_no_lock_and_no_target() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "Skill body");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+
+    assert_eq!(plan.items.len(), 1);
+    assert_eq!(plan.items[0].status, DeploymentStatus::Create);
+    assert_eq!(
+        plan.items[0].target_path,
+        PathBuf::from(".claude/skills/my-skill/SKILL.md")
+    );
+}
+
+#[test]
+fn plan_conflict_when_no_lock_but_target_exists() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "Skill body");
+
+    // Pre-create the target file
+    let target_dir = root.join(".claude/skills/my-skill");
+    fs::create_dir_all(&target_dir).unwrap();
+    fs::write(target_dir.join("SKILL.md"), "existing content").unwrap();
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+
+    assert_eq!(plan.items.len(), 1);
+    assert!(matches!(plan.items[0].status, DeploymentStatus::Conflict { .. }));
+}
+
+#[test]
+fn plan_update_when_no_lock_but_target_exists_and_force() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "Skill body");
+
+    // Pre-create the target file
+    let target_dir = root.join(".claude/skills/my-skill");
+    fs::create_dir_all(&target_dir).unwrap();
+    fs::write(target_dir.join("SKILL.md"), "existing content").unwrap();
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, true).unwrap();
+
+    assert_eq!(plan.items.len(), 1);
+    assert_eq!(plan.items[0].status, DeploymentStatus::Update);
+}
+
+#[test]
+fn plan_up_to_date_when_lock_matches() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    let skill_content = "Skill body";
+    setup_copilot_skill(root, "my-skill", skill_content);
+
+    // First, compute plan and execute to set up initial state
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
+
+    // Now compute again with the new lock — should be up-to-date
+    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    assert_eq!(plan2.items.len(), 1);
+    assert_eq!(plan2.items[0].status, DeploymentStatus::UpToDate);
+    assert!(plan2.is_clean());
+}
+
+#[test]
+fn plan_update_when_source_changes() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "Original body");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
+
+    // Modify source
+    setup_copilot_skill(root, "my-skill", "Updated body");
+
+    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    assert_eq!(plan2.items.len(), 1);
+    assert_eq!(plan2.items[0].status, DeploymentStatus::Update);
+}
+
+#[test]
+fn plan_conflict_when_target_modified_externally_and_policy_fail() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "Skill body");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
+
+    // Externally modify the target
+    let target = root.join(".claude/skills/my-skill/SKILL.md");
+    fs::write(&target, "someone else edited this").unwrap();
+
+    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    assert_eq!(plan2.items.len(), 1);
+    assert!(matches!(plan2.items[0].status, DeploymentStatus::Conflict { .. }));
+    assert!(plan2.has_conflicts());
+}
+
+#[test]
+fn plan_overwrite_when_target_modified_and_policy_overwrite() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "Skill body");
+
+    let mut rule = skill_set_rule("skills", ".github/skills", "copilot");
+    rule.on_target_modified = Some(OnTargetModified::Overwrite);
+
+    let spec = make_spec(vec!["claude-code"], vec![rule]);
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
+
+    // Externally modify the target
+    let target = root.join(".claude/skills/my-skill/SKILL.md");
+    fs::write(&target, "someone else edited this").unwrap();
+
+    let mut rule2 = skill_set_rule("skills", ".github/skills", "copilot");
+    rule2.on_target_modified = Some(OnTargetModified::Overwrite);
+    let spec2 = make_spec(vec!["claude-code"], vec![rule2]);
+
+    let plan2 = compute_plan(root, &spec2, &new_lock, false).unwrap();
+    assert_eq!(plan2.items.len(), 1);
+    assert_eq!(plan2.items[0].status, DeploymentStatus::Update);
+}
+
+#[test]
+fn plan_skip_when_target_modified_and_policy_skip() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "Skill body");
+
+    let mut rule = skill_set_rule("skills", ".github/skills", "copilot");
+    rule.on_target_modified = Some(OnTargetModified::Skip);
+
+    let spec = make_spec(vec!["claude-code"], vec![rule]);
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
+
+    // Externally modify the target
+    let target = root.join(".claude/skills/my-skill/SKILL.md");
+    fs::write(&target, "someone else edited this").unwrap();
+
+    let mut rule2 = skill_set_rule("skills", ".github/skills", "copilot");
+    rule2.on_target_modified = Some(OnTargetModified::Skip);
+    let spec2 = make_spec(vec!["claude-code"], vec![rule2]);
+
+    let plan2 = compute_plan(root, &spec2, &new_lock, false).unwrap();
+    assert_eq!(plan2.items.len(), 1);
+    assert_eq!(plan2.items[0].status, DeploymentStatus::UpToDate);
+}
+
+#[test]
+fn plan_orphan_detection() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "skill-a", "A body");
+    setup_copilot_skill(root, "skill-b", "B body");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
+
+    assert_eq!(new_lock.deployments.len(), 2);
+
+    // Remove skill-b from source
+    fs::remove_dir_all(root.join(".github/skills/skill-b")).unwrap();
+
+    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    let orphans: Vec<_> = plan2.items.iter()
+        .filter(|i| i.status == DeploymentStatus::Orphan)
+        .collect();
+    assert_eq!(orphans.len(), 1);
+    assert_eq!(orphans[0].target_path, PathBuf::from(".claude/skills/skill-b/SKILL.md"));
+    assert!(plan2.has_orphans());
+}
+
+// ── execute_plan tests ───────────────────────────────────────────────
+
+#[test]
+fn execute_creates_files() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "deploy", "Deploy instructions");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
+
+    // Verify file was created
+    let target = root.join(".claude/skills/deploy/SKILL.md");
+    assert!(target.exists());
+    let content = fs::read_to_string(&target).unwrap();
+    assert!(content.contains("Deploy instructions"));
+
+    // Verify lock was updated
+    assert_eq!(new_lock.deployments.len(), 1);
+    assert_eq!(new_lock.deployments[0].rule_id, "skills");
+    assert_eq!(new_lock.deployments[0].agent, AgentName::new("claude-code"));
+}
+
+#[test]
+fn execute_deletes_orphans() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "skill-a", "A body");
+    setup_copilot_skill(root, "skill-b", "B body");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
+
+    let target_b = root.join(".claude/skills/skill-b/SKILL.md");
+    assert!(target_b.exists());
+
+    // Remove skill-b from source
+    fs::remove_dir_all(root.join(".github/skills/skill-b")).unwrap();
+
+    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    let new_lock2 = execute_plan(root, &plan2, &new_lock, false).unwrap();
+
+    assert!(!target_b.exists());
+    assert_eq!(new_lock2.deployments.len(), 1);
+}
+
+#[test]
+fn execute_check_mode_does_not_write() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "Skill body");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let new_lock = execute_plan(root, &plan, &lock, true).unwrap();
+
+    let target = root.join(".claude/skills/my-skill/SKILL.md");
+    assert!(!target.exists());
+    assert_eq!(new_lock.deployments.len(), 1);
+}
+
+#[test]
+fn execute_errors_on_conflicts() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "Skill body");
+
+    // Pre-create the target file to cause conflict
+    let target_dir = root.join(".claude/skills/my-skill");
+    fs::create_dir_all(&target_dir).unwrap();
+    fs::write(target_dir.join("SKILL.md"), "existing content").unwrap();
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    assert!(plan.has_conflicts());
+
+    let result = execute_plan(root, &plan, &lock, false);
+    assert!(result.is_err());
+}
+
+// ── Multi-agent tests ────────────────────────────────────────────────
+
+#[test]
+fn plan_deploys_to_multiple_agents() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "Skill body");
+
+    let spec = make_spec(
+        vec!["copilot", "claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+
+    assert_eq!(plan.items.len(), 2);
+    let paths: Vec<PathBuf> = plan.items.iter().map(|i| i.target_path.clone()).collect();
+    assert!(paths.contains(&PathBuf::from(".github/skills/my-skill/SKILL.md")));
+    assert!(paths.contains(&PathBuf::from(".claude/skills/my-skill/SKILL.md")));
+}
+
+#[test]
+fn full_roundtrip_with_agents() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    // Set up source agents in copilot format
+    setup_copilot_agent(root, "reviewer", "---\nname: Reviewer\n---\nReview code carefully");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![agent_set_rule("agents", ".github/agents", "copilot")],
+    );
+    let lock = empty_lock();
+
+    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    assert_eq!(plan.items.len(), 1);
+    assert_eq!(plan.items[0].status, DeploymentStatus::Create);
+
+    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
+
+    let target = root.join(".claude/agents/reviewer.agent.md");
+    assert!(target.exists());
+    let content = fs::read_to_string(&target).unwrap();
+    assert!(content.contains("Review code carefully"));
+    assert!(content.contains("name:"));
+
+    // Second sync — should be up-to-date
+    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    assert!(plan2.is_clean());
+}

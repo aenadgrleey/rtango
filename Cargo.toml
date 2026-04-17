@@ -10,6 +10,7 @@ anyhow = "1"
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_yml = "0.0.12"
+blake3 = "1"
 
 [dev-dependencies]
 tempfile = "3"

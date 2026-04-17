@@ -13,7 +13,7 @@ pub struct Lock {
     pub deployments: Vec<Deployment>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Deployment {
     pub rule_id: String,
     pub agent: AgentName,
