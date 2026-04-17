@@ -223,7 +223,7 @@ mod exec {
             "---\nname: foo\n---\n",
         );
 
-        init::exec(tmp.path(), false, vec![], false).unwrap();
+        init::exec(tmp.path(), false, false).unwrap();
 
         assert!(tmp.path().join(".rtango/spec.yaml").exists());
         assert!(tmp.path().join(".rtango/lock.yaml").exists());
@@ -238,7 +238,7 @@ mod exec {
         );
         write_file(&tmp.path().join(".rtango/spec.yaml"), "version: 1\nagents: []\n");
 
-        let result = init::exec(tmp.path(), false, vec![], false);
+        let result = init::exec(tmp.path(), false, false);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("already exists"));
@@ -253,7 +253,7 @@ mod exec {
         );
         write_file(&tmp.path().join(".rtango/spec.yaml"), "version: 1\nagents: []\n");
 
-        init::exec(tmp.path(), true, vec![], false).unwrap();
+        init::exec(tmp.path(), true, false).unwrap();
 
         let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("claude-code"));
@@ -263,48 +263,26 @@ mod exec {
     fn fails_if_no_agents_detected() {
         let tmp = tempfile::tempdir().unwrap();
 
-        let result = init::exec(tmp.path(), false, vec![], false);
+        let result = init::exec(tmp.path(), false, false);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("no agents"));
     }
 
     #[test]
-    fn explicit_agents_override_detection() {
-        let tmp = tempfile::tempdir().unwrap();
-
-        init::exec(tmp.path(), false, vec!["copilot".into()], false).unwrap();
-
-        let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
-        assert!(content.contains("copilot"));
-        assert!(!content.contains("claude-code"));
-    }
-
-    #[test]
-    fn no_detect_with_explicit_agent() {
+    fn no_detect_writes_empty_spec() {
         let tmp = tempfile::tempdir().unwrap();
         write_file(
             &tmp.path().join(".claude/skills/foo/SKILL.md"),
             "---\nname: foo\n---\n",
         );
 
-        init::exec(tmp.path(), false, vec!["copilot".into()], true).unwrap();
+        init::exec(tmp.path(), false, true).unwrap();
 
         let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
-        assert!(content.contains("copilot"));
+        assert!(content.contains("agents: []"));
+        assert!(content.contains("rules: []"));
         assert!(!content.contains("claude-code"));
-    }
-
-    #[test]
-    fn no_detect_without_agents_fails() {
-        let tmp = tempfile::tempdir().unwrap();
-        write_file(
-            &tmp.path().join(".claude/skills/foo/SKILL.md"),
-            "---\nname: foo\n---\n",
-        );
-
-        let result = init::exec(tmp.path(), false, vec![], true);
-        assert!(result.is_err());
     }
 
     #[test]
@@ -315,7 +293,7 @@ mod exec {
             "---\nname: foo\n---\nbody",
         );
 
-        init::exec(tmp.path(), false, vec![], false).unwrap();
+        init::exec(tmp.path(), false, false).unwrap();
 
         let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("claude-code"));
@@ -331,7 +309,7 @@ mod exec {
             "---\nname: foo\n---\n",
         );
 
-        init::exec(tmp.path(), false, vec![], false).unwrap();
+        init::exec(tmp.path(), false, false).unwrap();
 
         let content = fs::read_to_string(tmp.path().join(".rtango/lock.yaml")).unwrap();
         assert!(content.contains("version: 1"));
@@ -346,7 +324,7 @@ mod exec {
             "---\nname: foo\n---\n",
         );
 
-        init::exec(tmp.path(), false, vec![], false).unwrap();
+        init::exec(tmp.path(), false, false).unwrap();
 
         let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("version: 1"));

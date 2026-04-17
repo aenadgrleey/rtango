@@ -21,11 +21,7 @@ pub enum Command {
         #[arg(short, long)]
         force: bool,
 
-        /// Explicitly specify agents (repeatable)
-        #[arg(short, long, value_name = "NAME")]
-        agent: Vec<String>,
-
-        /// Skip auto-detection, create minimal empty spec
+        /// Skip auto-detection, create an empty spec skeleton
         #[arg(short, long)]
         no_detect: bool,
     },
@@ -175,7 +171,7 @@ pub enum Command {
 pub fn run(cli: Cli) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     match cli.command {
-        Command::Init { force, agent, no_detect } => init::exec(&root, force, agent, no_detect),
+        Command::Init { force, no_detect } => init::exec(&root, force, no_detect),
         Command::Sync { check, force, rule, adopt } => sync::exec(&root, check, force, rule, adopt),
         Command::Status { rule, verbose } => status::exec(&root, rule, verbose),
         Command::Own { path, rule_id, clear } => own::exec(&root, path, rule_id, clear),

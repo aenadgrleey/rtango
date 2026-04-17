@@ -2,17 +2,12 @@ use std::path::Path;
 
 use anyhow::bail;
 
-use crate::agent::{self, DetectedAgent, SourceKind};
+use crate::agent::{self, SourceKind};
 use crate::error::RtangoError;
 use crate::spec::io::{lock_path, rtango_dir, spec_path};
 use crate::spec::{AgentName, Defaults, Lock, Rule, RuleKind, Source, Spec};
 
-pub fn exec(
-    root: &Path,
-    force: bool,
-    agents: Vec<String>,
-    no_detect: bool,
-) -> anyhow::Result<()> {
+pub fn exec(root: &Path, force: bool, no_detect: bool) -> anyhow::Result<()> {
     let spec_path = spec_path(root);
     let lock_path = lock_path(root);
 
@@ -21,24 +16,7 @@ pub fn exec(
     }
 
     let detected = if no_detect {
-        if agents.is_empty() {
-            bail!(RtangoError::NoAgentsDetected);
-        }
-        agents
-            .into_iter()
-            .map(|name| DetectedAgent {
-                name: AgentName::new(name),
-                sources: vec![],
-            })
-            .collect::<Vec<_>>()
-    } else if !agents.is_empty() {
-        agents
-            .into_iter()
-            .map(|name| DetectedAgent {
-                name: AgentName::new(name),
-                sources: vec![],
-            })
-            .collect::<Vec<_>>()
+        Vec::new()
     } else {
         let detected = agent::detect_agents(root);
         if detected.is_empty() {
