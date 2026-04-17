@@ -12,8 +12,8 @@ pub enum SourceKind {
 impl From<SourceKind> for RuleKind {
     fn from(kind: SourceKind) -> Self {
         match kind {
-            SourceKind::SkillSet => RuleKind::SkillSet {},
-            SourceKind::AgentSet => RuleKind::AgentSet {},
+            SourceKind::SkillSet => RuleKind::skill_set(),
+            SourceKind::AgentSet => RuleKind::agent_set(),
         }
     }
 }

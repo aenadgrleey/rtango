@@ -283,7 +283,7 @@ fn resolve_one(
         .iter()
         .filter(|r| matches!(
             rule_kinds.get(r.as_str()),
-            Some(RuleKind::Skill {}) | Some(RuleKind::Agent {})
+            Some(RuleKind::Skill { .. }) | Some(RuleKind::Agent { .. })
         ))
         .collect();
     match singles.len() {

@@ -198,7 +198,7 @@ fn detected_source_to_rule_kind() {
         kind: SourceKind::SkillSet,
     };
     let rule_kind: RuleKind = skill_set.kind.into();
-    assert!(matches!(rule_kind, RuleKind::SkillSet {}));
+    assert!(matches!(rule_kind, RuleKind::SkillSet { .. }));
 
     let agent_set = DetectedSource {
         id: "test-agents".into(),
@@ -206,7 +206,7 @@ fn detected_source_to_rule_kind() {
         kind: SourceKind::AgentSet,
     };
     let rule_kind: RuleKind = agent_set.kind.into();
-    assert!(matches!(rule_kind, RuleKind::AgentSet {}));
+    assert!(matches!(rule_kind, RuleKind::AgentSet { .. }));
 }
 
 // ── init exec ─────────────────────────────────────────────────

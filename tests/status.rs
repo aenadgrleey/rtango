@@ -40,7 +40,7 @@ fn skill_set_rule(id: &str, path: &str, schema: &str) -> Rule {
         source: Source::Local(PathBuf::from(path)),
         schema_agent: AgentName::new(schema),
         on_target_modified: None,
-        kind: RuleKind::SkillSet {},
+        kind: RuleKind::skill_set(),
     }
 }
 

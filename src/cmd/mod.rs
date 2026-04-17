@@ -86,25 +86,79 @@ pub enum Command {
         #[arg(short = 'r', long = "repo", value_name = "SPEC", conflicts_with = "local")]
         repo: Option<String>,
 
-        /// Kind is agent-set
+        /// Kind is a single skill
         #[arg(
-            long = "agent-set",
-            visible_alias = "as",
-            conflicts_with = "skill_set"
+            long = "skill",
+            conflicts_with_all = ["agent", "skill_set", "agent_set"]
         )]
-        agent_set: bool,
+        skill: bool,
+
+        /// Kind is a single agent
+        #[arg(
+            long = "agent",
+            conflicts_with_all = ["skill", "skill_set", "agent_set"]
+        )]
+        agent: bool,
 
         /// Kind is skill-set
         #[arg(
             long = "skill-set",
             visible_alias = "ss",
-            conflicts_with = "agent_set"
+            conflicts_with_all = ["skill", "agent", "agent_set"]
         )]
         skill_set: bool,
 
+        /// Kind is agent-set
+        #[arg(
+            long = "agent-set",
+            visible_alias = "as",
+            conflicts_with_all = ["skill", "agent", "skill_set"]
+        )]
+        agent_set: bool,
+
         /// Schema agent for the rule (required when spec has >1 agent)
-        #[arg(short = 'g', long = "agent", value_name = "AGENT")]
-        schema_agent: Option<String>,
+        #[arg(short = 'g', long = "schema", value_name = "AGENT")]
+        schema: Option<String>,
+
+        /// Override frontmatter name (single kinds only)
+        #[arg(
+            long = "name",
+            value_name = "NAME",
+            conflicts_with_all = ["skill_set", "agent_set"]
+        )]
+        name: Option<String>,
+
+        /// Override frontmatter description (single kinds only)
+        #[arg(
+            long = "description",
+            value_name = "TEXT",
+            conflicts_with_all = ["skill_set", "agent_set"]
+        )]
+        description: Option<String>,
+
+        /// Override frontmatter allowed-tools (single kinds only, space-separated)
+        #[arg(
+            long = "allowed-tools",
+            value_name = "TOOLS",
+            conflicts_with_all = ["skill_set", "agent_set"]
+        )]
+        allowed_tools: Option<String>,
+
+        /// Only include entries matching NAME (set kinds only, repeatable)
+        #[arg(
+            long = "include",
+            value_name = "NAME",
+            conflicts_with_all = ["skill", "agent", "exclude"]
+        )]
+        include: Vec<String>,
+
+        /// Exclude entries matching NAME (set kinds only, repeatable)
+        #[arg(
+            long = "exclude",
+            value_name = "NAME",
+            conflicts_with_all = ["skill", "agent", "include"]
+        )]
+        exclude: Vec<String>,
     },
 }
 
@@ -119,9 +173,33 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             id,
             local,
             repo,
-            agent_set,
+            skill,
+            agent,
             skill_set,
-            schema_agent,
-        } => add::exec(&root, id, local, repo, agent_set, skill_set, schema_agent),
+            agent_set,
+            schema,
+            name,
+            description,
+            allowed_tools,
+            include,
+            exclude,
+        } => add::exec(
+            &root,
+            add::AddOptions {
+                id,
+                local,
+                repo,
+                skill,
+                agent,
+                skill_set,
+                agent_set,
+                schema,
+                name,
+                description,
+                allowed_tools,
+                include,
+                exclude,
+            },
+        ),
     }
 }

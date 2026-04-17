@@ -55,7 +55,7 @@ fn skill_set_rule(id: &str, path: &str, schema: &str) -> Rule {
         source: Source::Local(PathBuf::from(path)),
         schema_agent: AgentName::new(schema),
         on_target_modified: None,
-        kind: RuleKind::SkillSet {},
+        kind: RuleKind::skill_set(),
     }
 }
 
@@ -65,7 +65,7 @@ fn agent_set_rule(id: &str, path: &str, schema: &str) -> Rule {
         source: Source::Local(PathBuf::from(path)),
         schema_agent: AgentName::new(schema),
         on_target_modified: None,
-        kind: RuleKind::AgentSet {},
+        kind: RuleKind::agent_set(),
     }
 }
 
@@ -75,7 +75,7 @@ fn single_skill_rule(id: &str, path: &str, schema: &str) -> Rule {
         source: Source::Local(PathBuf::from(path)),
         schema_agent: AgentName::new(schema),
         on_target_modified: None,
-        kind: RuleKind::Skill {},
+        kind: RuleKind::skill(),
     }
 }
 
@@ -85,7 +85,7 @@ fn single_agent_rule(id: &str, path: &str, schema: &str) -> Rule {
         source: Source::Local(PathBuf::from(path)),
         schema_agent: AgentName::new(schema),
         on_target_modified: None,
-        kind: RuleKind::Agent {},
+        kind: RuleKind::agent(),
     }
 }
 
@@ -164,6 +164,97 @@ fn expand_single_agent() {
             assert_eq!(a.body, "Does helpful things");
         }
         _ => panic!("expected agent"),
+    }
+}
+
+#[test]
+fn expand_skill_set_honors_include_filter() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "alpha", "Alpha body");
+    setup_copilot_skill(root, "beta", "Beta body");
+    setup_copilot_skill(root, "gamma", "Gamma body");
+
+    let rule = Rule {
+        id: "picked".into(),
+        source: Source::Local(PathBuf::from(".github/skills")),
+        schema_agent: AgentName::new("copilot"),
+        on_target_modified: None,
+        kind: RuleKind::SkillSet {
+            include: vec!["alpha".into(), "gamma".into()],
+            exclude: vec![],
+        },
+    };
+    let items = expand_rule(root, &rule).unwrap();
+
+    let names: Vec<&str> = items.iter().map(|i| match &i.kind {
+        ExpandedKind::Skill(s) => s.name.as_str(),
+        _ => panic!("expected skill"),
+    }).collect();
+    assert_eq!(names.len(), 2);
+    assert!(names.contains(&"alpha"));
+    assert!(names.contains(&"gamma"));
+    assert!(!names.contains(&"beta"));
+}
+
+#[test]
+fn expand_agent_set_honors_exclude_filter() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_agent(root, "reviewer", "Review");
+    setup_copilot_agent(root, "planner", "Plan");
+    setup_copilot_agent(root, "draft", "Draft");
+
+    let rule = Rule {
+        id: "mostly".into(),
+        source: Source::Local(PathBuf::from(".github/agents")),
+        schema_agent: AgentName::new("copilot"),
+        on_target_modified: None,
+        kind: RuleKind::AgentSet {
+            include: vec![],
+            exclude: vec!["draft".into()],
+        },
+    };
+    let items = expand_rule(root, &rule).unwrap();
+
+    let names: Vec<&str> = items.iter().map(|i| match &i.kind {
+        ExpandedKind::Agent(a) => a.name.as_str(),
+        _ => panic!("expected agent"),
+    }).collect();
+    assert_eq!(names.len(), 2);
+    assert!(!names.contains(&"draft"));
+}
+
+#[test]
+fn expand_single_skill_applies_overrides() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(
+        root,
+        "my-skill",
+        "---\nname: Old Name\ndescription: Old desc\nallowed-tools: Read\n---\nBody",
+    );
+
+    let rule = Rule {
+        id: "s1".into(),
+        source: Source::Local(PathBuf::from(".github/skills/my-skill")),
+        schema_agent: AgentName::new("copilot"),
+        on_target_modified: None,
+        kind: RuleKind::Skill {
+            name: Some("New Name".into()),
+            description: Some("New desc".into()),
+            allowed_tools: Some("Read Grep Bash".into()),
+        },
+    };
+    let items = expand_rule(root, &rule).unwrap();
+    assert_eq!(items.len(), 1);
+    match &items[0].kind {
+        ExpandedKind::Skill(s) => {
+            assert_eq!(s.front_matter.name.as_deref(), Some("New Name"));
+            assert_eq!(s.front_matter.description.as_deref(), Some("New desc"));
+            assert_eq!(s.front_matter.allowed_tools.len(), 3);
+        }
+        _ => panic!("expected skill"),
     }
 }
 

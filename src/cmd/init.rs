@@ -58,8 +58,8 @@ pub fn exec(
                 schema_agent: agent.name.clone(),
                 on_target_modified: None,
                 kind: match source.kind {
-                    SourceKind::SkillSet => RuleKind::SkillSet {},
-                    SourceKind::AgentSet => RuleKind::AgentSet {},
+                    SourceKind::SkillSet => RuleKind::skill_set(),
+                    SourceKind::AgentSet => RuleKind::agent_set(),
                 },
             });
         }

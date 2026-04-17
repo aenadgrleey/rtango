@@ -3,65 +3,88 @@ use std::path::{Path, PathBuf};
 use crate::spec::io::{load_spec, save_spec};
 use crate::spec::{AgentName, GithubSource, Rule, RuleKind, Source};
 
-/// Append a new rule to `.rtango/spec.yaml`.
+/// Options forwarded from the `rtango add` CLI.
 ///
-/// Exactly one of `local` / `repo` must be given (source); exactly one of
-/// `agent_set` / `skill_set` must be given (kind). `schema_agent` is required
-/// only when the spec declares more than one agent — otherwise we pick the
-/// sole agent automatically.
-pub fn exec(
-    root: &Path,
-    id: String,
-    local: Option<PathBuf>,
-    repo: Option<String>,
-    agent_set: bool,
-    skill_set: bool,
-    schema_agent: Option<String>,
-) -> anyhow::Result<()> {
-    let source = match (local, repo) {
+/// Exactly one of `local` / `repo` must be set (source); exactly one of
+/// `skill` / `agent` / `skill_set` / `agent_set` must be set (kind). The
+/// override and filter fields are kind-specific and rejected if used with
+/// the wrong kind.
+#[derive(Debug, Default)]
+pub struct AddOptions {
+    pub id: String,
+    pub local: Option<PathBuf>,
+    pub repo: Option<String>,
+    pub skill: bool,
+    pub agent: bool,
+    pub skill_set: bool,
+    pub agent_set: bool,
+    pub schema: Option<String>,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub allowed_tools: Option<String>,
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+}
+
+/// Append a new rule to `.rtango/spec.yaml`.
+pub fn exec(root: &Path, opts: AddOptions) -> anyhow::Result<()> {
+    let source = match (opts.local, opts.repo) {
         (Some(p), None) => Source::Local(p),
         (None, Some(spec)) => Source::Github(parse_repo_spec(&spec)?),
         (Some(_), Some(_)) => anyhow::bail!("pass only one of --local/-l or --repo/-r"),
         (None, None) => anyhow::bail!("source required: pass --local/-l PATH or --repo/-r SPEC"),
     };
 
-    let kind = match (agent_set, skill_set) {
-        (true, false) => RuleKind::AgentSet {},
-        (false, true) => RuleKind::SkillSet {},
-        (true, true) => anyhow::bail!("pass only one of --agent-set/--as or --skill-set/--ss"),
-        (false, false) => {
-            anyhow::bail!("kind required: pass --agent-set/--as or --skill-set/--ss")
-        }
+    let kind = match (opts.skill, opts.agent, opts.skill_set, opts.agent_set) {
+        (true, false, false, false) => RuleKind::Skill {
+            name: opts.name,
+            description: opts.description,
+            allowed_tools: opts.allowed_tools,
+        },
+        (false, true, false, false) => RuleKind::Agent {
+            name: opts.name,
+            description: opts.description,
+            allowed_tools: opts.allowed_tools,
+        },
+        (false, false, true, false) => RuleKind::SkillSet {
+            include: opts.include,
+            exclude: opts.exclude,
+        },
+        (false, false, false, true) => RuleKind::AgentSet {
+            include: opts.include,
+            exclude: opts.exclude,
+        },
+        (false, false, false, false) => anyhow::bail!(
+            "kind required: pass --skill, --agent, --skill-set/--ss, or --agent-set/--as"
+        ),
+        _ => anyhow::bail!(
+            "pass only one kind of --skill, --agent, --skill-set/--ss, or --agent-set/--as"
+        ),
     };
 
     let mut spec = load_spec(root)?;
 
-    if spec.rules.iter().any(|r| r.id == id) {
-        anyhow::bail!("rule '{}' already exists in spec", id);
+    if spec.rules.iter().any(|r| r.id == opts.id) {
+        anyhow::bail!("rule '{}' already exists in spec", opts.id);
     }
 
-    let schema = match schema_agent {
+    let schema = match opts.schema {
         Some(name) => {
             let name = AgentName::new(name);
             if !spec.agents.contains(&name) {
-                anyhow::bail!(
-                    "agent '{}' is not declared in spec.agents",
-                    name
-                );
+                anyhow::bail!("agent '{}' is not declared in spec.agents", name);
             }
             name
         }
         None => match spec.agents.as_slice() {
             [only] => only.clone(),
             [] => anyhow::bail!("spec has no agents; cannot infer schema_agent"),
-            _ => anyhow::bail!(
-                "spec has multiple agents; specify one with --agent/-g"
-            ),
+            _ => anyhow::bail!("spec has multiple agents; specify one with --schema/-g"),
         },
     };
 
     spec.rules.push(Rule {
-        id: id.clone(),
+        id: opts.id.clone(),
         source,
         schema_agent: schema,
         on_target_modified: None,
@@ -69,7 +92,7 @@ pub fn exec(
     });
 
     save_spec(root, &spec)?;
-    println!("added rule '{}'", id);
+    println!("added rule '{}'", opts.id);
     Ok(())
 }
 
