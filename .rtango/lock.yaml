@@ -1,0 +1,10 @@
+version: 1
+tracked_agents:
+- claude-code
+deployments:
+- rule_id: agents-md
+  agent: claude-code
+  source: AGENTS.md
+  source_hash: '10b56b3f3b02f5a8dcc57ad5001c0c1f7e5429af36e9c2dbc2ca669556989d95'
+  content: CLAUDE.md
+  content_hash: '10b56b3f3b02f5a8dcc57ad5001c0c1f7e5429af36e9c2dbc2ca669556989d95'

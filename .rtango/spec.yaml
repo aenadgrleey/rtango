@@ -1,0 +1,10 @@
+version: 1
+agents:
+- claude-code
+defaults:
+  on_target_modified: fail
+rules:
+- id: agents-md
+  source: AGENTS.md
+  schema_agent: claude-code
+  kind: system
