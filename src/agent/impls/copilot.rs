@@ -1,32 +1,24 @@
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use crate::agent::detect::{self, DetectedAgent, DetectedSource, Detector, SourceKind};
+use crate::agent::frontmatter::{self, FrontMatter, FrontMatterMapper};
+use crate::agent::parse::{self, AgentsParser, SkillsParser};
+use crate::agent::permission::Permission;
+use crate::agent::write::{self, AgentsWriter, FrontMatterWriter, SkillsWriter};
+use crate::agent::{Agent, AgentSet, Skill, SkillSet};
 use crate::spec::AgentName;
-
-use super::detect::{self, DetectedAgent, DetectedSource, Detector, SourceKind};
-use super::frontmatter::{FrontMatter, FrontMatterMapper, tokenize_tools};
-use super::parse::{self, AgentsParser, SkillsParser};
-use super::permission::Permission;
-use super::write::{self, AgentsWriter, FrontMatterWriter, SkillsWriter};
-use super::{Agent, AgentSet, Skill, SkillSet};
 
 pub struct CopilotParser;
 
 impl SkillsParser for CopilotParser {
-    fn name(&self) -> AgentName {
-        AgentName::new("copilot")
-    }
-
+    fn name(&self) -> AgentName { AgentName::new("copilot") }
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
         parse::parse_standard_skills(&root.join(".github/skills"), self)
     }
 }
 
 impl AgentsParser for CopilotParser {
-    fn name(&self) -> AgentName {
-        AgentName::new("copilot")
-    }
-
+    fn name(&self) -> AgentName { AgentName::new("copilot") }
     fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
         parse::parse_standard_agents(&root.join(".github/agents"), self)
     }
@@ -48,27 +40,8 @@ impl FrontMatterMapper for CopilotParser {
     }
 
     fn parse_frontmatter(&self, yaml: &str) -> anyhow::Result<FrontMatter> {
-        let raw: BTreeMap<String, serde_yml::Value> = serde_yml::from_str(yaml)?;
-        let mut fm = FrontMatter::default();
-
-        fm.name = extract_string(&raw, "name");
-        fm.description = extract_string(&raw, "description");
-
-        if let Some(tools_str) = extract_string(&raw, "allowed-tools") {
-            fm.allowed_tools = tokenize_tools(&tools_str)
-                .into_iter()
-                .map(|t| self.parse_permission(&t))
-                .collect();
-        }
-
-        fm.extra = raw
-            .into_iter()
-            .filter(|(k, _)| !matches!(k.as_str(), "name" | "description" | "allowed-tools"))
-            .collect();
-
-        Ok(fm)
+        frontmatter::parse_standard_frontmatter(yaml, self)
     }
-
 }
 
 impl FrontMatterWriter for CopilotParser {
@@ -83,7 +56,6 @@ impl FrontMatterWriter for CopilotParser {
             Permission::WebFetch => Some("web_fetch".into()),
             Permission::WebSearch => Some("web_search".into()),
             Permission::Other(s) => Some(s.clone()),
-            // Claude Code-only permissions have no Copilot equivalent
             Permission::NotebookRead
             | Permission::NotebookEdit
             | Permission::TodoRead
@@ -98,29 +70,21 @@ impl FrontMatterWriter for CopilotParser {
 }
 
 impl SkillsWriter for CopilotParser {
-    fn name(&self) -> AgentName {
-        AgentName::new("copilot")
-    }
-
+    fn name(&self) -> AgentName { AgentName::new("copilot") }
     fn write_skill(&self, root: &Path, skill: &Skill) -> anyhow::Result<PathBuf> {
         write::write_standard_skill(&root.join(".github/skills"), skill, self)
     }
 }
 
 impl AgentsWriter for CopilotParser {
-    fn name(&self) -> AgentName {
-        AgentName::new("copilot")
-    }
-
+    fn name(&self) -> AgentName { AgentName::new("copilot") }
     fn write_agent(&self, root: &Path, agent: &Agent) -> anyhow::Result<PathBuf> {
         write::write_standard_agent(&root.join(".github/agents"), agent, self)
     }
 }
 
 impl Detector for CopilotParser {
-    fn name(&self) -> AgentName {
-        AgentName::new("copilot")
-    }
+    fn name(&self) -> AgentName { AgentName::new("copilot") }
 
     fn detect(&self, root: &Path) -> Option<DetectedAgent> {
         let skills_dir = root.join(".github/skills");
@@ -154,8 +118,4 @@ impl Detector for CopilotParser {
             sources,
         })
     }
-}
-
-fn extract_string(map: &BTreeMap<String, serde_yml::Value>, key: &str) -> Option<String> {
-    map.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
 }

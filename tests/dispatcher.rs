@@ -1,10 +1,13 @@
 use rtango::agent::{agents_parser, frontmatter_mapper, skills_parser};
 use rtango::spec::AgentName;
 
+const KNOWN_AGENTS: &[&str] = &["copilot", "claude-code", "codex", "pi", "opencode"];
+
 #[test]
 fn skills_parser_known() {
-    assert!(skills_parser(&AgentName::new("copilot")).is_some());
-    assert!(skills_parser(&AgentName::new("claude-code")).is_some());
+    for name in KNOWN_AGENTS {
+        assert!(skills_parser(&AgentName::new(*name)).is_some(), "missing skills_parser for {name}");
+    }
 }
 
 #[test]
@@ -14,8 +17,9 @@ fn skills_parser_unknown() {
 
 #[test]
 fn agents_parser_known() {
-    assert!(agents_parser(&AgentName::new("copilot")).is_some());
-    assert!(agents_parser(&AgentName::new("claude-code")).is_some());
+    for name in KNOWN_AGENTS {
+        assert!(agents_parser(&AgentName::new(*name)).is_some(), "missing agents_parser for {name}");
+    }
 }
 
 #[test]
@@ -25,8 +29,9 @@ fn agents_parser_unknown() {
 
 #[test]
 fn frontmatter_mapper_known() {
-    assert!(frontmatter_mapper(&AgentName::new("copilot")).is_some());
-    assert!(frontmatter_mapper(&AgentName::new("claude-code")).is_some());
+    for name in KNOWN_AGENTS {
+        assert!(frontmatter_mapper(&AgentName::new(*name)).is_some(), "missing frontmatter_mapper for {name}");
+    }
 }
 
 #[test]

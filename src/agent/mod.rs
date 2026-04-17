@@ -1,7 +1,6 @@
-mod copilot;
-mod claude_code;
 pub mod detect;
 pub mod frontmatter;
+mod impls;
 mod parse;
 pub mod permission;
 pub mod write;
@@ -10,8 +9,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-pub use copilot::CopilotParser;
-pub use claude_code::ClaudeCodeParser;
+pub use impls::*;
 pub use detect::{DetectedAgent, DetectedSource, Detector, SourceKind};
 pub use frontmatter::{FrontMatter, FrontMatterMapper};
 pub use parse::*;
@@ -24,6 +22,9 @@ fn all_parsers() -> Vec<Box<dyn AgentParser>> {
     vec![
         Box::new(CopilotParser),
         Box::new(ClaudeCodeParser),
+        Box::new(CodexParser),
+        Box::new(PiParser),
+        Box::new(OpenCodeParser),
     ]
 }
 
@@ -32,11 +33,17 @@ fn all_parsers() -> Vec<Box<dyn AgentParser>> {
 pub trait AgentParser: SkillsParser + AgentsParser + FrontMatterMapper + FrontMatterWriter + SkillsWriter + AgentsWriter + Detector {}
 impl AgentParser for CopilotParser {}
 impl AgentParser for ClaudeCodeParser {}
+impl AgentParser for CodexParser {}
+impl AgentParser for PiParser {}
+impl AgentParser for OpenCodeParser {}
 
 pub fn skills_parser(name: &AgentName) -> Option<Box<dyn SkillsParser>> {
     match name.as_str() {
         "copilot" => Some(Box::new(CopilotParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
+        "codex" => Some(Box::new(CodexParser)),
+        "pi" => Some(Box::new(PiParser)),
+        "opencode" => Some(Box::new(OpenCodeParser)),
         _ => None,
     }
 }
@@ -45,6 +52,9 @@ pub fn agents_parser(name: &AgentName) -> Option<Box<dyn AgentsParser>> {
     match name.as_str() {
         "copilot" => Some(Box::new(CopilotParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
+        "codex" => Some(Box::new(CodexParser)),
+        "pi" => Some(Box::new(PiParser)),
+        "opencode" => Some(Box::new(OpenCodeParser)),
         _ => None,
     }
 }
@@ -53,6 +63,9 @@ pub fn frontmatter_mapper(name: &AgentName) -> Option<Box<dyn FrontMatterMapper>
     match name.as_str() {
         "copilot" => Some(Box::new(CopilotParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
+        "codex" => Some(Box::new(CodexParser)),
+        "pi" => Some(Box::new(PiParser)),
+        "opencode" => Some(Box::new(OpenCodeParser)),
         _ => None,
     }
 }
@@ -61,6 +74,9 @@ pub fn frontmatter_writer(name: &AgentName) -> Option<Box<dyn FrontMatterWriter>
     match name.as_str() {
         "copilot" => Some(Box::new(CopilotParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
+        "codex" => Some(Box::new(CodexParser)),
+        "pi" => Some(Box::new(PiParser)),
+        "opencode" => Some(Box::new(OpenCodeParser)),
         _ => None,
     }
 }
@@ -69,6 +85,9 @@ pub fn skills_writer(name: &AgentName) -> Option<Box<dyn SkillsWriter>> {
     match name.as_str() {
         "copilot" => Some(Box::new(CopilotParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
+        "codex" => Some(Box::new(CodexParser)),
+        "pi" => Some(Box::new(PiParser)),
+        "opencode" => Some(Box::new(OpenCodeParser)),
         _ => None,
     }
 }
@@ -77,6 +96,9 @@ pub fn agents_writer(name: &AgentName) -> Option<Box<dyn AgentsWriter>> {
     match name.as_str() {
         "copilot" => Some(Box::new(CopilotParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
+        "codex" => Some(Box::new(CodexParser)),
+        "pi" => Some(Box::new(PiParser)),
+        "opencode" => Some(Box::new(OpenCodeParser)),
         _ => None,
     }
 }
@@ -85,6 +107,9 @@ pub fn detector(name: &AgentName) -> Option<Box<dyn Detector>> {
     match name.as_str() {
         "copilot" => Some(Box::new(CopilotParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
+        "codex" => Some(Box::new(CodexParser)),
+        "pi" => Some(Box::new(PiParser)),
+        "opencode" => Some(Box::new(OpenCodeParser)),
         _ => None,
     }
 }

@@ -12,16 +12,17 @@ use super::{
 
 /// Compute the target path for a rendered item based on the target agent.
 fn target_path_for(agent: &AgentName, kind: &ExpandedKind) -> anyhow::Result<PathBuf> {
-    match agent.as_str() {
-        "copilot" => match kind {
-            ExpandedKind::Skill(s) => Ok(PathBuf::from(format!(".github/skills/{}/SKILL.md", s.name))),
-            ExpandedKind::Agent(a) => Ok(PathBuf::from(format!(".github/agents/{}.agent.md", a.name))),
-        },
-        "claude-code" => match kind {
-            ExpandedKind::Skill(s) => Ok(PathBuf::from(format!(".claude/skills/{}/SKILL.md", s.name))),
-            ExpandedKind::Agent(a) => Ok(PathBuf::from(format!(".claude/agents/{}.agent.md", a.name))),
-        },
+    let dir = match agent.as_str() {
+        "copilot" => ".github",
+        "claude-code" => ".claude",
+        "codex" => ".codex",
+        "pi" => ".pi",
+        "opencode" => ".opencode",
         other => anyhow::bail!("unknown target agent: {}", other),
+    };
+    match kind {
+        ExpandedKind::Skill(s) => Ok(PathBuf::from(format!("{dir}/skills/{}/SKILL.md", s.name))),
+        ExpandedKind::Agent(a) => Ok(PathBuf::from(format!("{dir}/agents/{}.agent.md", a.name))),
     }
 }
 

@@ -51,6 +51,37 @@ pub fn join_frontmatter(yaml: &str, body: &str) -> String {
     out
 }
 
+pub fn extract_string(map: &BTreeMap<String, serde_yml::Value>, key: &str) -> Option<String> {
+    map.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+}
+
+/// Standard frontmatter parsing shared by agents that use YAML with
+/// `name`, `description`, and `allowed-tools` keys.
+pub fn parse_standard_frontmatter(
+    yaml: &str,
+    mapper: &dyn FrontMatterMapper,
+) -> anyhow::Result<FrontMatter> {
+    let raw: BTreeMap<String, serde_yml::Value> = serde_yml::from_str(yaml)?;
+    let mut fm = FrontMatter::default();
+
+    fm.name = extract_string(&raw, "name");
+    fm.description = extract_string(&raw, "description");
+
+    if let Some(tools_str) = extract_string(&raw, "allowed-tools") {
+        fm.allowed_tools = tokenize_tools(&tools_str)
+            .into_iter()
+            .map(|t| mapper.parse_permission(&t))
+            .collect();
+    }
+
+    fm.extra = raw
+        .into_iter()
+        .filter(|(k, _)| !matches!(k.as_str(), "name" | "description" | "allowed-tools"))
+        .collect();
+
+    Ok(fm)
+}
+
 pub fn tokenize_tools(s: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
