@@ -25,6 +25,7 @@ fn all_parsers() -> Vec<Box<dyn AgentParser>> {
         Box::new(CodexParser),
         Box::new(PiParser),
         Box::new(OpenCodeParser),
+        Box::new(PlainParser),
     ]
 }
 
@@ -36,6 +37,7 @@ impl AgentParser for ClaudeCodeParser {}
 impl AgentParser for CodexParser {}
 impl AgentParser for PiParser {}
 impl AgentParser for OpenCodeParser {}
+impl AgentParser for PlainParser {}
 
 pub fn skills_parser(name: &AgentName) -> Option<Box<dyn SkillsParser>> {
     match name.as_str() {
@@ -44,6 +46,7 @@ pub fn skills_parser(name: &AgentName) -> Option<Box<dyn SkillsParser>> {
         "codex" => Some(Box::new(CodexParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
+        "plain" => Some(Box::new(PlainParser)),
         _ => None,
     }
 }
@@ -55,6 +58,7 @@ pub fn agents_parser(name: &AgentName) -> Option<Box<dyn AgentsParser>> {
         "codex" => Some(Box::new(CodexParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
+        "plain" => Some(Box::new(PlainParser)),
         _ => None,
     }
 }
@@ -66,6 +70,7 @@ pub fn frontmatter_mapper(name: &AgentName) -> Option<Box<dyn FrontMatterMapper>
         "codex" => Some(Box::new(CodexParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
+        "plain" => Some(Box::new(PlainParser)),
         _ => None,
     }
 }
@@ -77,6 +82,7 @@ pub fn frontmatter_writer(name: &AgentName) -> Option<Box<dyn FrontMatterWriter>
         "codex" => Some(Box::new(CodexParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
+        "plain" => Some(Box::new(PlainParser)),
         _ => None,
     }
 }
@@ -88,6 +94,7 @@ pub fn skills_writer(name: &AgentName) -> Option<Box<dyn SkillsWriter>> {
         "codex" => Some(Box::new(CodexParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
+        "plain" => Some(Box::new(PlainParser)),
         _ => None,
     }
 }
@@ -99,6 +106,7 @@ pub fn agents_writer(name: &AgentName) -> Option<Box<dyn AgentsWriter>> {
         "codex" => Some(Box::new(CodexParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
+        "plain" => Some(Box::new(PlainParser)),
         _ => None,
     }
 }
@@ -110,6 +118,7 @@ pub fn detector(name: &AgentName) -> Option<Box<dyn Detector>> {
         "codex" => Some(Box::new(CodexParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
+        "plain" => Some(Box::new(PlainParser)),
         _ => None,
     }
 }

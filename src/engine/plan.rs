@@ -21,11 +21,13 @@ fn target_path_for(agent: &AgentName, kind: &ExpandedKind) -> anyhow::Result<Pat
         "codex" => ".codex",
         "pi" => ".pi",
         "opencode" => ".opencode",
+        "plain" => "",
         other => anyhow::bail!("unknown target agent: {}", other),
     };
+    let prefix = if dir.is_empty() { String::new() } else { format!("{dir}/") };
     match kind {
-        ExpandedKind::Skill(s) => Ok(PathBuf::from(format!("{dir}/skills/{}/SKILL.md", s.name))),
-        ExpandedKind::Agent(a) => Ok(PathBuf::from(format!("{dir}/agents/{}.agent.md", a.name))),
+        ExpandedKind::Skill(s) => Ok(PathBuf::from(format!("{prefix}skills/{}/SKILL.md", s.name))),
+        ExpandedKind::Agent(a) => Ok(PathBuf::from(format!("{prefix}agents/{}.agent.md", a.name))),
         ExpandedKind::System(_) => unreachable!("handled above"),
     }
 }
@@ -38,6 +40,7 @@ fn system_file_path_for(agent: &AgentName) -> anyhow::Result<PathBuf> {
         "codex" => PathBuf::from("AGENTS.md"),
         "pi" => PathBuf::from("AGENTS.md"),
         "opencode" => PathBuf::from("AGENTS.md"),
+        "plain" => PathBuf::from("system/AGENTS.md"),
         other => anyhow::bail!("unknown target agent: {}", other),
     })
 }
