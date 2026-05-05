@@ -6,7 +6,7 @@ use crate::spec::io::{load_lock_or_empty, load_spec};
 pub fn exec(root: &Path, rule: Option<String>, verbose: bool) -> anyhow::Result<()> {
     let spec = load_spec(root)?;
     let lock = load_lock_or_empty(root)?;
-    let plan = compute_plan(root, &spec, &lock, false)?;
+    let plan = compute_plan(root, &spec, &lock, false, true)?;
 
     let items: Vec<_> = plan
         .items

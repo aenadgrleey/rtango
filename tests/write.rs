@@ -43,9 +43,7 @@ fn copilot_format_known_permissions() {
 #[test]
 fn copilot_format_claude_only_permissions_are_none() {
     let w = CopilotParser;
-    assert_eq!(w.format_permission(&Permission::NotebookRead), None);
     assert_eq!(w.format_permission(&Permission::NotebookEdit), None);
-    assert_eq!(w.format_permission(&Permission::TodoRead), None);
     assert_eq!(w.format_permission(&Permission::TodoWrite), None);
 }
 
@@ -56,13 +54,6 @@ fn copilot_format_other_permission() {
         w.format_permission(&Permission::Other("custom_tool".into())),
         Some("custom_tool".into()),
     );
-}
-
-#[test]
-fn copilot_format_listdir() {
-    let w = CopilotParser;
-    // ListDir is Claude Code-specific (LS), no Copilot equivalent
-    assert_eq!(w.format_permission(&Permission::ListDir), None);
 }
 
 // ── Copilot: format_frontmatter ───────────────────────────────────
@@ -178,22 +169,13 @@ fn claude_code_format_known_permissions() {
         Some("WebSearch".into())
     );
     assert_eq!(
-        w.format_permission(&Permission::NotebookRead),
-        Some("NotebookRead".into())
-    );
-    assert_eq!(
         w.format_permission(&Permission::NotebookEdit),
         Some("NotebookEdit".into())
-    );
-    assert_eq!(
-        w.format_permission(&Permission::TodoRead),
-        Some("TodoRead".into())
     );
     assert_eq!(
         w.format_permission(&Permission::TodoWrite),
         Some("TodoWrite".into())
     );
-    assert_eq!(w.format_permission(&Permission::ListDir), Some("LS".into()));
 }
 
 #[test]

@@ -1,3 +1,4 @@
+pub mod builtin;
 mod execute;
 mod expand;
 mod fetch;

@@ -106,7 +106,7 @@ pub fn exec_with_prompter(
         save_lock(root, &lock)?;
     }
 
-    let plan = compute_plan(root, &spec, &lock, force || adopt)?;
+    let plan = compute_plan(root, &spec, &lock, force || adopt, true)?;
 
     // If filtering by rule, partition the plan items. Owners are always
     // carried through whole-spec so a per-rule sync doesn't drop unrelated

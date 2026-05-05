@@ -68,7 +68,7 @@ pub fn exec(root: &Path, targets: Vec<String>) -> anyhow::Result<()> {
         deployments: vec![],
     };
 
-    let plan = compute_plan(root, &spec, &lock, true)?;
+    let plan = compute_plan(root, &spec, &lock, true, true)?;
     let _new_lock = execute_plan(root, &plan, &lock, false)?;
 
     let mut creates = 0usize;

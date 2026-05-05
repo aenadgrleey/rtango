@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::spec::{Deployment, Lock};
 
-use super::{DeploymentStatus, Plan};
+use super::{DeploymentStatus, Plan, builtin};
 
 /// Execute a sync plan: write target files and return the updated lock.
 ///
@@ -45,25 +45,31 @@ pub fn execute_plan(
                     }
                     fs::write(&target, &item.rendered_content)?;
                 }
-                deployments.push(Deployment {
-                    rule_id: item.rule_id.clone(),
-                    agent: item.agent.clone(),
-                    source: item.source.clone(),
-                    source_hash: item.source_hash.clone(),
-                    content: item.target_path.clone(),
-                    content_hash: super::hash_content(&item.rendered_content),
-                });
+                // Built-in skills are written but not tracked in the lock.
+                if item.rule_id != builtin::BUILTIN_RTANGO_RULE_ID {
+                    deployments.push(Deployment {
+                        rule_id: item.rule_id.clone(),
+                        agent: item.agent.clone(),
+                        source: item.source.clone(),
+                        source_hash: item.source_hash.clone(),
+                        content: item.target_path.clone(),
+                        content_hash: super::hash_content(&item.rendered_content),
+                    });
+                }
             }
             DeploymentStatus::UpToDate => {
-                // Keep in lock with current info
-                deployments.push(Deployment {
-                    rule_id: item.rule_id.clone(),
-                    agent: item.agent.clone(),
-                    source: item.source.clone(),
-                    source_hash: item.source_hash.clone(),
-                    content: item.target_path.clone(),
-                    content_hash: super::hash_content(&item.rendered_content),
-                });
+                // Built-in skills are not tracked in the lock.
+                if item.rule_id != builtin::BUILTIN_RTANGO_RULE_ID {
+                    // Keep in lock with current info
+                    deployments.push(Deployment {
+                        rule_id: item.rule_id.clone(),
+                        agent: item.agent.clone(),
+                        source: item.source.clone(),
+                        source_hash: item.source_hash.clone(),
+                        content: item.target_path.clone(),
+                        content_hash: super::hash_content(&item.rendered_content),
+                    });
+                }
             }
             DeploymentStatus::Orphan => {
                 let target = root.join(&item.target_path);

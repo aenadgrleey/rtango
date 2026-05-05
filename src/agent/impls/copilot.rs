@@ -60,11 +60,7 @@ impl FrontMatterWriter for CopilotParser {
             Permission::WebFetch => Some("web_fetch".into()),
             Permission::WebSearch => Some("web_search".into()),
             Permission::Other(s) => Some(s.clone()),
-            Permission::NotebookRead
-            | Permission::NotebookEdit
-            | Permission::TodoRead
-            | Permission::TodoWrite
-            | Permission::ListDir => None,
+            Permission::NotebookEdit | Permission::TodoWrite => None,
         }
     }
 

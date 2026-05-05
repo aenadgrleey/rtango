@@ -47,11 +47,8 @@ impl FrontMatterMapper for PlainParser {
             "Glob" => Permission::Glob,
             "WebFetch" => Permission::WebFetch,
             "WebSearch" => Permission::WebSearch,
-            "NotebookRead" => Permission::NotebookRead,
             "NotebookEdit" => Permission::NotebookEdit,
-            "TodoRead" => Permission::TodoRead,
             "TodoWrite" => Permission::TodoWrite,
-            "ListDir" => Permission::ListDir,
             other => Permission::Other(other.to_string()),
         }
     }
@@ -73,11 +70,8 @@ impl FrontMatterWriter for PlainParser {
             Permission::Glob => "Glob".into(),
             Permission::WebFetch => "WebFetch".into(),
             Permission::WebSearch => "WebSearch".into(),
-            Permission::NotebookRead => "NotebookRead".into(),
             Permission::NotebookEdit => "NotebookEdit".into(),
-            Permission::TodoRead => "TodoRead".into(),
             Permission::TodoWrite => "TodoWrite".into(),
-            Permission::ListDir => "ListDir".into(),
             Permission::Other(s) => s.clone(),
         };
         Some(token)

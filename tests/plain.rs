@@ -20,11 +20,8 @@ fn canonical_permissions_round_trip() {
         Permission::Glob,
         Permission::WebFetch,
         Permission::WebSearch,
-        Permission::NotebookRead,
         Permission::NotebookEdit,
-        Permission::TodoRead,
         Permission::TodoWrite,
-        Permission::ListDir,
         Permission::Other("CustomTool".into()),
     ];
     for perm in cases {

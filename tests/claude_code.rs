@@ -20,11 +20,31 @@ fn known_permissions() {
     assert_eq!(p.parse_permission("Glob"), Permission::Glob);
     assert_eq!(p.parse_permission("WebFetch"), Permission::WebFetch);
     assert_eq!(p.parse_permission("WebSearch"), Permission::WebSearch);
-    assert_eq!(p.parse_permission("NotebookRead"), Permission::NotebookRead);
     assert_eq!(p.parse_permission("NotebookEdit"), Permission::NotebookEdit);
-    assert_eq!(p.parse_permission("TodoRead"), Permission::TodoRead);
     assert_eq!(p.parse_permission("TodoWrite"), Permission::TodoWrite);
-    assert_eq!(p.parse_permission("LS"), Permission::ListDir);
+}
+
+#[test]
+fn obsolete_tokens_fall_through() {
+    // LS, NotebookRead, TodoRead, MultiEdit are no longer valid Claude Code tools.
+    // Legacy frontmatter still round-trips via Other (except MultiEdit, which is
+    // remapped to Edit because the ergonomic intent is the same).
+    let p = parser();
+    assert_eq!(
+        p.parse_permission("LS"),
+        Permission::Other("LS".into()),
+        "LS was removed from Claude Code (use Bash/Glob)"
+    );
+    assert_eq!(
+        p.parse_permission("NotebookRead"),
+        Permission::Other("NotebookRead".into()),
+        "NotebookRead was merged into Read"
+    );
+    assert_eq!(
+        p.parse_permission("TodoRead"),
+        Permission::Other("TodoRead".into()),
+        "TodoRead was removed; only TodoWrite remains"
+    );
 }
 
 #[test]

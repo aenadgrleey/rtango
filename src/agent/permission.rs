@@ -18,16 +18,10 @@ pub enum Permission {
     WebFetch,
     /// Search the web (Claude Code: `WebSearch`, Copilot: `web_search`)
     WebSearch,
-    /// Read notebooks (Claude Code only)
-    NotebookRead,
     /// Edit notebooks (Claude Code only)
     NotebookEdit,
-    /// Read todos (Claude Code only)
-    TodoRead,
-    /// Write todos (Claude Code only)
+    /// Write/manage todos (Claude Code only)
     TodoWrite,
-    /// List directory contents (Claude Code: `LS`)
-    ListDir,
     /// Tool that doesn't map to a known canonical permission
     Other(String),
 }
@@ -44,11 +38,8 @@ impl std::fmt::Display for Permission {
             Self::Glob => write!(f, "Glob"),
             Self::WebFetch => write!(f, "WebFetch"),
             Self::WebSearch => write!(f, "WebSearch"),
-            Self::NotebookRead => write!(f, "NotebookRead"),
             Self::NotebookEdit => write!(f, "NotebookEdit"),
-            Self::TodoRead => write!(f, "TodoRead"),
             Self::TodoWrite => write!(f, "TodoWrite"),
-            Self::ListDir => write!(f, "ListDir"),
             Self::Other(s) => write!(f, "{s}"),
         }
     }

@@ -67,11 +67,11 @@ fn status_clean_all_up_to_date() {
     let lock = empty_lock();
 
     // Execute to get everything synced
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
 
     // Now compute plan again — should be clean
-    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    let plan2 = compute_plan(root, &spec, &new_lock, false, false).unwrap();
     assert!(plan2.is_clean());
     assert_eq!(plan2.items.len(), 1);
     assert_eq!(plan2.items[0].status, DeploymentStatus::UpToDate);
@@ -95,7 +95,7 @@ fn status_with_creates() {
     );
     let lock = empty_lock();
 
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     assert_eq!(plan.items.len(), 2);
     assert!(
         plan.items
@@ -144,7 +144,7 @@ fn status_verbose_shows_up_to_date() {
     let lock = empty_lock();
 
     // Sync first
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
 
     // Verbose status should succeed and include up-to-date items

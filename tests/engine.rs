@@ -343,7 +343,7 @@ fn plan_create_when_no_lock_and_no_target() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
 
     assert_eq!(plan.items.len(), 1);
     assert_eq!(plan.items[0].status, DeploymentStatus::Create);
@@ -369,7 +369,7 @@ fn plan_conflict_when_no_lock_but_target_exists() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
 
     assert_eq!(plan.items.len(), 1);
     assert!(matches!(
@@ -394,7 +394,7 @@ fn plan_update_when_no_lock_but_target_exists_and_force() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, true).unwrap();
+    let plan = compute_plan(root, &spec, &lock, true, false).unwrap();
 
     assert_eq!(plan.items.len(), 1);
     assert_eq!(plan.items[0].status, DeploymentStatus::Update);
@@ -413,11 +413,11 @@ fn plan_up_to_date_when_lock_matches() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
 
     // Now compute again with the new lock — should be up-to-date
-    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    let plan2 = compute_plan(root, &spec, &new_lock, false, false).unwrap();
     assert_eq!(plan2.items.len(), 1);
     assert_eq!(plan2.items[0].status, DeploymentStatus::UpToDate);
     assert!(plan2.is_clean());
@@ -434,13 +434,13 @@ fn plan_update_when_source_changes() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
 
     // Modify source
     setup_copilot_skill(root, "my-skill", "Updated body");
 
-    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    let plan2 = compute_plan(root, &spec, &new_lock, false, false).unwrap();
     assert_eq!(plan2.items.len(), 1);
     assert_eq!(plan2.items[0].status, DeploymentStatus::Update);
 }
@@ -456,14 +456,14 @@ fn plan_conflict_when_target_modified_externally_and_policy_fail() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
 
     // Externally modify the target
     let target = root.join(".claude/skills/my-skill/SKILL.md");
     fs::write(&target, "someone else edited this").unwrap();
 
-    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    let plan2 = compute_plan(root, &spec, &new_lock, false, false).unwrap();
     assert_eq!(plan2.items.len(), 1);
     assert!(matches!(
         plan2.items[0].status,
@@ -483,7 +483,7 @@ fn plan_overwrite_when_target_modified_and_policy_overwrite() {
 
     let spec = make_spec(vec!["claude-code"], vec![rule]);
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
 
     // Externally modify the target
@@ -494,7 +494,7 @@ fn plan_overwrite_when_target_modified_and_policy_overwrite() {
     rule2.on_target_modified = Some(OnTargetModified::Overwrite);
     let spec2 = make_spec(vec!["claude-code"], vec![rule2]);
 
-    let plan2 = compute_plan(root, &spec2, &new_lock, false).unwrap();
+    let plan2 = compute_plan(root, &spec2, &new_lock, false, false).unwrap();
     assert_eq!(plan2.items.len(), 1);
     assert_eq!(plan2.items[0].status, DeploymentStatus::Update);
 }
@@ -510,7 +510,7 @@ fn plan_skip_when_target_modified_and_policy_skip() {
 
     let spec = make_spec(vec!["claude-code"], vec![rule]);
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
 
     // Externally modify the target
@@ -521,7 +521,7 @@ fn plan_skip_when_target_modified_and_policy_skip() {
     rule2.on_target_modified = Some(OnTargetModified::Skip);
     let spec2 = make_spec(vec!["claude-code"], vec![rule2]);
 
-    let plan2 = compute_plan(root, &spec2, &new_lock, false).unwrap();
+    let plan2 = compute_plan(root, &spec2, &new_lock, false, false).unwrap();
     assert_eq!(plan2.items.len(), 1);
     assert_eq!(plan2.items[0].status, DeploymentStatus::UpToDate);
 }
@@ -538,7 +538,7 @@ fn plan_orphan_detection() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
 
     assert_eq!(new_lock.deployments.len(), 2);
@@ -546,7 +546,7 @@ fn plan_orphan_detection() {
     // Remove skill-b from source
     fs::remove_dir_all(root.join(".github/skills/skill-b")).unwrap();
 
-    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    let plan2 = compute_plan(root, &spec, &new_lock, false, false).unwrap();
     let orphans: Vec<_> = plan2
         .items
         .iter()
@@ -573,7 +573,7 @@ fn execute_creates_files() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
 
     // Verify file was created
@@ -600,7 +600,7 @@ fn execute_deletes_orphans() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
 
     let target_b = root.join(".claude/skills/skill-b/SKILL.md");
@@ -609,7 +609,7 @@ fn execute_deletes_orphans() {
     // Remove skill-b from source
     fs::remove_dir_all(root.join(".github/skills/skill-b")).unwrap();
 
-    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    let plan2 = compute_plan(root, &spec, &new_lock, false, false).unwrap();
     let new_lock2 = execute_plan(root, &plan2, &new_lock, false).unwrap();
 
     assert!(!target_b.exists());
@@ -627,7 +627,7 @@ fn execute_check_mode_does_not_write() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let new_lock = execute_plan(root, &plan, &lock, true).unwrap();
 
     let target = root.join(".claude/skills/my-skill/SKILL.md");
@@ -651,7 +651,7 @@ fn execute_errors_on_conflicts() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     assert!(plan.has_conflicts());
 
     let result = execute_plan(root, &plan, &lock, false);
@@ -671,7 +671,7 @@ fn plan_deploys_to_multiple_agents() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
 
     assert_eq!(plan.items.len(), 2);
     let paths: Vec<PathBuf> = plan.items.iter().map(|i| i.target_path.clone()).collect();
@@ -691,7 +691,7 @@ fn plan_skips_when_source_equals_target() {
         vec![skill_set_rule("skills", ".github/skills", "copilot")],
     );
     let lock = empty_lock();
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
 
     // copilot self-write is dropped; only claude-code remains.
     assert_eq!(plan.items.len(), 1);
@@ -720,7 +720,7 @@ fn full_roundtrip_with_agents() {
     );
     let lock = empty_lock();
 
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     assert_eq!(plan.items.len(), 1);
     assert_eq!(plan.items[0].status, DeploymentStatus::Create);
 
@@ -733,7 +733,7 @@ fn full_roundtrip_with_agents() {
     assert!(content.contains("name:"));
 
     // Second sync — should be up-to-date
-    let plan2 = compute_plan(root, &spec, &new_lock, false).unwrap();
+    let plan2 = compute_plan(root, &spec, &new_lock, false, false).unwrap();
     assert!(plan2.is_clean());
 }
 
@@ -760,14 +760,14 @@ fn single_file_rule_beats_set_for_shared_path() {
     let lock = empty_lock();
 
     // First sync: single writes .github/skills/git-helper; set expands to [other].
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let lock1 = execute_plan(root, &plan, &lock, false).unwrap();
     assert!(root.join(".github/skills/git-helper/SKILL.md").exists());
     assert!(root.join(".claude/skills/other/SKILL.md").exists());
 
     // Second sync: set would see git-helper in .github/skills but the single
     // rule owns it — no conflict, no duplicate deployment.
-    let plan2 = compute_plan(root, &spec, &lock1, false).unwrap();
+    let plan2 = compute_plan(root, &spec, &lock1, false, false).unwrap();
     assert!(
         !plan2.has_conflicts(),
         "expected no conflicts, got {:?}",
@@ -804,7 +804,7 @@ fn set_vs_set_errors_without_lock_decision() {
         ],
     );
     let lock = empty_lock();
-    let err = compute_plan(root, &spec, &lock, false).unwrap_err();
+    let err = compute_plan(root, &spec, &lock, false, false).unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("ambiguous ownership"), "got: {}", msg);
     assert!(msg.contains("\"a\""), "got: {}", msg);
@@ -838,7 +838,7 @@ fn set_vs_set_respects_lock_owners_override() {
         rule_id: "a".into(),
     });
 
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let foo_items: Vec<_> = plan
         .items
         .iter()
@@ -884,7 +884,7 @@ fn reparented_path_is_not_marked_as_orphan() {
         vec!["claude-code"],
         vec![skill_set_rule("set", ".github/skills", "copilot")],
     );
-    let plan = compute_plan(root, &spec, &lock, false).unwrap();
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
     let orphans: Vec<_> = plan
         .items
         .iter()
@@ -913,7 +913,7 @@ fn reparented_target_adopts_existing_content_without_conflict() {
         vec!["claude-code"],
         vec![single_skill_rule("single", ".github/skills/foo", "copilot")],
     );
-    let plan_v1 = compute_plan(root, &spec_v1, &empty_lock(), false).unwrap();
+    let plan_v1 = compute_plan(root, &spec_v1, &empty_lock(), false, false).unwrap();
     let lock_v1 = execute_plan(root, &plan_v1, &empty_lock(), false).unwrap();
     assert!(root.join(".claude/skills/foo/SKILL.md").exists());
     assert_eq!(
@@ -930,7 +930,7 @@ fn reparented_target_adopts_existing_content_without_conflict() {
         vec!["claude-code"],
         vec![skill_set_rule("set", ".github/skills", "copilot")],
     );
-    let plan_v2 = compute_plan(root, &spec_v2, &lock_v1, false).unwrap();
+    let plan_v2 = compute_plan(root, &spec_v2, &lock_v1, false, false).unwrap();
 
     assert!(
         !plan_v2.has_conflicts(),
@@ -970,7 +970,7 @@ fn reparented_target_with_modified_source_is_updated() {
         vec!["claude-code"],
         vec![single_skill_rule("single", ".github/skills/foo", "copilot")],
     );
-    let plan_v1 = compute_plan(root, &spec_v1, &empty_lock(), false).unwrap();
+    let plan_v1 = compute_plan(root, &spec_v1, &empty_lock(), false, false).unwrap();
     let lock_v1 = execute_plan(root, &plan_v1, &empty_lock(), false).unwrap();
 
     // Source changes.
@@ -981,7 +981,7 @@ fn reparented_target_with_modified_source_is_updated() {
         vec!["claude-code"],
         vec![skill_set_rule("set", ".github/skills", "copilot")],
     );
-    let plan_v2 = compute_plan(root, &spec_v2, &lock_v1, false).unwrap();
+    let plan_v2 = compute_plan(root, &spec_v2, &lock_v1, false, false).unwrap();
 
     assert!(!plan_v2.has_conflicts(), "got {:?}", plan_v2.items);
     let set_item = plan_v2
@@ -992,4 +992,123 @@ fn reparented_target_with_modified_source_is_updated() {
         })
         .unwrap();
     assert_eq!(set_item.status, DeploymentStatus::Update);
+}
+
+// ── Builtin skill tests ───────────────────────────────────────────────
+
+#[test]
+fn builtin_injects_rtango_skill_when_enabled() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_claude_skill(root, "my-skill", "# My Skill\n");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![single_skill_rule(
+            "my-skill",
+            ".claude/skills/my-skill",
+            "claude-code",
+        )],
+    );
+    let lock = empty_lock();
+
+    let plan = compute_plan(root, &spec, &lock, false, true).unwrap();
+
+    // The user skill is a self-write (claude-code → claude-code), so it's skipped.
+    // Only the builtin should appear.
+    let builtin_items: Vec<_> = plan
+        .items
+        .iter()
+        .filter(|i| i.rule_id == "_builtin_rtango")
+        .collect();
+    assert_eq!(builtin_items.len(), 1);
+    assert_eq!(builtin_items[0].status, DeploymentStatus::Create);
+    assert_eq!(
+        builtin_items[0].target_path,
+        PathBuf::from(".claude/skills/rtango/SKILL.md")
+    );
+}
+
+#[test]
+fn builtin_not_injected_when_disabled() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_claude_skill(root, "my-skill", "# My Skill\n");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![single_skill_rule(
+            "my-skill",
+            ".claude/skills/my-skill",
+            "claude-code",
+        )],
+    );
+    let lock = empty_lock();
+
+    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
+    let builtin_items: Vec<_> = plan
+        .items
+        .iter()
+        .filter(|i| i.rule_id == "_builtin_rtango")
+        .collect();
+    assert!(builtin_items.is_empty());
+}
+
+#[test]
+fn builtin_not_tracked_in_lock() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_claude_skill(root, "my-skill", "# My Skill\n");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![single_skill_rule(
+            "my-skill",
+            ".claude/skills/my-skill",
+            "claude-code",
+        )],
+    );
+    let lock = empty_lock();
+
+    let plan = compute_plan(root, &spec, &lock, false, true).unwrap();
+    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
+
+    // Lock should be empty: user skill is a self-write (no deployment),
+    // builtin is not tracked.
+    assert!(new_lock.deployments.is_empty());
+}
+
+#[test]
+fn builtin_skips_source_dirs_of_user_rules() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    // User has a skill-set rule for .github/skills/
+    setup_copilot_skill(root, "my-skill", "# My Skill\n");
+
+    let spec = make_spec(
+        vec!["claude-code", "copilot"],
+        vec![skill_set_rule("my-skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+
+    let plan = compute_plan(root, &spec, &lock, false, true).unwrap();
+    let builtin_items: Vec<_> = plan
+        .items
+        .iter()
+        .filter(|i| i.rule_id == "_builtin_rtango")
+        .collect();
+
+    // Builtin should skip .github/skills/rtango/SKILL.md (it's a source dir)
+    // but should write .claude/skills/rtango/SKILL.md
+    for bi in &builtin_items {
+        assert!(
+            !bi.target_path.starts_with(".github/"),
+            "builtin should not write to .github/: {:?}",
+            bi.target_path
+        );
+    }
+    assert!(
+        builtin_items.len() >= 1,
+        "should write to at least one agent"
+    );
 }

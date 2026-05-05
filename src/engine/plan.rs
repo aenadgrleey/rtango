@@ -6,7 +6,7 @@ use crate::agent::{self, frontmatter::join_frontmatter};
 use crate::spec::{AgentName, Deployment, Lock, OnTargetModified, Ownership, RuleKind, Spec};
 
 use super::{
-    DeploymentStatus, ExpandedItem, ExpandedKind, Plan, PlannedDeployment, RenderedTarget,
+    DeploymentStatus, ExpandedItem, ExpandedKind, Plan, PlannedDeployment, RenderedTarget, builtin,
     effective_policy, expand_rule, hash_content,
 };
 
@@ -117,7 +117,17 @@ fn find_reparent_candidate<'a>(
 }
 
 /// Compute the full sync plan.
-pub fn compute_plan(root: &Path, spec: &Spec, lock: &Lock, force: bool) -> anyhow::Result<Plan> {
+///
+/// When `inject_builtins` is true, built-in skills (like the rtango usage
+/// skill) are automatically added to the plan. They are written to disk but
+/// not tracked in the lock.
+pub fn compute_plan(
+    root: &Path,
+    spec: &Spec,
+    lock: &Lock,
+    force: bool,
+    inject_builtins: bool,
+) -> anyhow::Result<Plan> {
     let default_policy = spec.defaults.on_target_modified;
     let mut items = Vec::new();
 
@@ -269,6 +279,57 @@ pub fn compute_plan(root: &Path, spec: &Spec, lock: &Lock, force: bool) -> anyho
             status: DeploymentStatus::Orphan,
         });
     }
+
+    // Built-in skills: injected automatically, not tracked in the lock.
+    //
+    // Skip a builtin target if:
+    //   1. A user rule already produces the same target path, OR
+    //   2. The target path falls under a user rule's source directory.
+    //      (Otherwise the user's skill-set rule would scoop up the builtin
+    //      file on the next sync, causing a lock-miss conflict.)
+    if inject_builtins {
+        let user_source_dirs: Vec<PathBuf> = spec
+            .rules
+            .iter()
+            .filter_map(|r| match &r.source {
+                crate::spec::Source::Local(p) => Some(root.join(p)),
+                _ => None,
+            })
+            .filter(|p| p.is_dir())
+            .collect();
+
+        for rendered in builtin::builtin_rendered_targets(root, &spec.agents) {
+            let abs_target = root.join(&rendered.target_path);
+            if produced.contains(&abs_target) {
+                continue;
+            }
+            // Don't write into directories that user skill-set/agent-set rules scan.
+            if user_source_dirs
+                .iter()
+                .any(|dir| abs_target.starts_with(dir))
+            {
+                continue;
+            }
+            let disk_content = fs::read_to_string(&abs_target).ok();
+            let status = match disk_content {
+                Some(dc) if hash_content(&dc) == hash_content(&rendered.content) => {
+                    DeploymentStatus::UpToDate
+                }
+                Some(_) => DeploymentStatus::Update,
+                None => DeploymentStatus::Create,
+            };
+            produced.insert(abs_target.clone());
+            items.push(PlannedDeployment {
+                rule_id: rendered.rule_id,
+                agent: rendered.agent,
+                source: rendered.source,
+                source_hash: rendered.source_hash,
+                target_path: rendered.target_path,
+                rendered_content: rendered.content,
+                status,
+            });
+        }
+    } // end if inject_builtins
 
     Ok(Plan {
         items,

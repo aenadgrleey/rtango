@@ -44,7 +44,7 @@ demo/                  # worked example — real spec.yaml, lock.yaml, sample sk
 - `Source` — local path or `github: owner/repo[@ref][:path]`.
 - `Kind` — `skill`, `skill-set`, `agent`, `agent-set`, `system`.
 - `Lock` — tracks rendered outputs, content hashes, ownership decisions.
-- **Canonical permission set**: Read, Write, Edit, Shell, Grep, Glob, WebFetch, WebSearch, NotebookRead, NotebookEdit, TodoRead, TodoWrite, ListDir, Other. Each agent impl maps this set to its native tokens.
+- **Canonical permission set**: Read, Write, Edit, Shell, Grep, Glob, WebFetch, WebSearch, NotebookEdit, TodoWrite, Other. Each agent impl maps this set to its native tokens. Tokens an agent doesn't understand round-trip via `Other(_)`.
 
 ## Adding a new agent
 

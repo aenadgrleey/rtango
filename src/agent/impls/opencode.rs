@@ -63,11 +63,7 @@ impl FrontMatterWriter for OpenCodeParser {
             Permission::WebFetch => Some("webfetch".into()),
             Permission::WebSearch => Some("websearch".into()),
             Permission::Other(s) => Some(s.clone()),
-            Permission::NotebookRead
-            | Permission::NotebookEdit
-            | Permission::TodoRead
-            | Permission::TodoWrite
-            | Permission::ListDir => None,
+            Permission::NotebookEdit | Permission::TodoWrite => None,
         }
     }
 
