@@ -116,7 +116,9 @@ fn add_collection_with_schema_override() {
 
     let spec = load_spec(tmp.path()).unwrap();
     match &spec.rules[0].kind {
-        RuleKind::Collection { schema_override, .. } => {
+        RuleKind::Collection {
+            schema_override, ..
+        } => {
             assert_eq!(schema_override, &Some(AgentName::new("copilot")));
         }
         _ => panic!("expected Collection kind"),
@@ -221,7 +223,9 @@ fn collection_schema_override_round_trips_through_yaml() {
     let yaml = serde_yml::to_string(&spec).unwrap();
     let back: Spec = serde_yml::from_str(&yaml).unwrap();
     match &back.rules[0].kind {
-        RuleKind::Collection { schema_override, .. } => {
+        RuleKind::Collection {
+            schema_override, ..
+        } => {
             assert_eq!(schema_override, &Some(AgentName::new("copilot")));
         }
         _ => panic!("expected Collection kind"),

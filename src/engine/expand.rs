@@ -7,7 +7,9 @@ use crate::agent::{
 };
 use crate::spec::{Rule, RuleKind, Source};
 
-use super::{ExpandedItem, ExpandedKind, SystemFile, fetch_github, hash_content, read_collection_spec};
+use super::{
+    ExpandedItem, ExpandedKind, SystemFile, fetch_github, hash_content, read_collection_spec,
+};
 
 /// Expand a single rule into its constituent items by reading source files.
 ///
@@ -75,9 +77,17 @@ fn expand_collection(
     // Resolve the source to an on-disk root, exactly as non-collection rules do.
     let collection_root = match &rule.source {
         Source::Local(rel) => {
-            let abs = if rel.is_absolute() { rel.clone() } else { root.join(rel) };
+            let abs = if rel.is_absolute() {
+                rel.clone()
+            } else {
+                root.join(rel)
+            };
             if !abs.is_dir() {
-                anyhow::bail!("collection '{}': source directory not found: {}", rule.id, abs.display());
+                anyhow::bail!(
+                    "collection '{}': source directory not found: {}",
+                    rule.id,
+                    abs.display()
+                );
             }
             abs
         }
@@ -172,9 +182,8 @@ fn materialize(root: &Path, source: &Source) -> anyhow::Result<(PathBuf, PathBuf
                 cache_root.join(&g.path)
             };
             Ok((cache_root, filter))
-        }
-        // Collection rules are dispatched before reaching materialize.
-        // The Source variants (Local/Github) are handled above for all other kinds.
+        } // Collection rules are dispatched before reaching materialize.
+          // The Source variants (Local/Github) are handled above for all other kinds.
     }
 }
 

@@ -48,8 +48,13 @@ pub fn read_collection_spec(collection_root: &Path) -> anyhow::Result<crate::spe
             COLLECTION_SPEC_PATH,
         );
     }
-    let content = fs::read_to_string(&spec_file)
-        .with_context(|| format!("failed to read {} from {}", COLLECTION_SPEC_PATH, collection_root.display()))?;
+    let content = fs::read_to_string(&spec_file).with_context(|| {
+        format!(
+            "failed to read {} from {}",
+            COLLECTION_SPEC_PATH,
+            collection_root.display()
+        )
+    })?;
     crate::spec::io::parse_spec_content(&content, &collection_root.display().to_string())
 }
 

@@ -230,7 +230,10 @@ fn sync_prompts_for_each_contested_target_and_persists_decisions() {
 
     // Skill was written from col-a.
     let content = fs::read_to_string(root.join(".claude/skills/shared/SKILL.md")).unwrap();
-    assert!(content.contains("shared"), "rendered file should have skill content");
+    assert!(
+        content.contains("shared"),
+        "rendered file should have skill content"
+    );
 }
 
 #[test]
@@ -281,9 +284,8 @@ fn sync_aborts_when_prompter_returns_none() {
         calls: vec![],
     };
 
-    let err =
-        rtango::cmd::sync::exec_with_prompter(root, false, false, None, false, &mut prompter)
-            .unwrap_err();
+    let err = rtango::cmd::sync::exec_with_prompter(root, false, false, None, false, &mut prompter)
+        .unwrap_err();
 
     assert!(
         err.to_string().contains("ambiguous ownership"),
@@ -577,11 +579,7 @@ fn collection_rtango_skill_suppresses_builtin_no_prompt() {
 
     // A collection that contains a "rtango" skill.
     let col = setup_collection(root, "alpha", &["rtango"]);
-    fs::write(
-        col.join("skills/rtango/SKILL.md"),
-        CUSTOM_RTANGO_BODY,
-    )
-    .unwrap();
+    fs::write(col.join("skills/rtango/SKILL.md"), CUSTOM_RTANGO_BODY).unwrap();
 
     let spec = Spec {
         version: 1,
