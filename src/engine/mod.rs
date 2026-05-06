@@ -6,7 +6,7 @@ mod plan;
 
 pub use execute::*;
 pub use expand::*;
-pub use fetch::*;
+pub use fetch::{fetch_github, read_collection_spec};
 pub use plan::*;
 
 use std::path::PathBuf;

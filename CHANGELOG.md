@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `kind: collection` rule — point at any local path or GitHub repo that contains a `.rtango/spec.yaml` and all its rules are imported and rendered into the local project's agents
+- `rtango add --col`/`--collection-kind` flag to append collection rules from the CLI
+- `include`/`exclude` filters on collection rules to selectively import rule ids
+- `schema_override` on collection rules to force a different parser for all imported rules
+- Imported rules are namespaced in the lock as `<collection-id>/<rule-id>` to avoid collisions with local rules
+- Collection-vs-collection path conflicts are resolved through the existing interactive prompt and `rtango own` ownership mechanism
+- User-defined collection/skill/skill-set rules that produce a `rtango`-named skill correctly suppress the built-in rtango skill
+
 ## [0.2.0](https://github.com/aenadgrleey/rtango/compare/v0.1.0...v0.2.0) - 2026-05-05
 
 ### Added

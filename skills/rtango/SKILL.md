@@ -16,7 +16,7 @@ rtango is a package manager for AI-agent configuration. You author a skill or in
 - **spec.yaml** (`.rtango/spec.yaml`) — declares agents, rules, and defaults. This is the source of truth for what gets synced.
 - **lock.yaml** (`.rtango/lock.yaml`) — records what was last written, content hashes, and ownership decisions. Never hand-edit; regenerate with `rtango sync`.
 - **Rule** — a `{id, source, schema_agent, kind}` declaration. Source can be a local path or a GitHub ref (`github: owner/repo@ref:path`).
-- **Kind** — one of: `skill`, `skill-set`, `agent`, `agent-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md`).
+- **Kind** — one of: `skill`, `skill-set`, `agent`, `agent-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md`), `collection` (import all rules from another repo's `.rtango/spec.yaml`).
 - **schema_agent** — the agent whose native format the source file is written in. rtango reads frontmatter and permissions using this agent's parser.
 
 ## Commands
@@ -54,7 +54,19 @@ rtango add my-agents --local .github/agents/ --agent-set
 rtango add instructions --local AGENTS.md --system
 
 # Add from GitHub
-rtango add upstream-skill --repo "github: owner/repo@abc123:path/to/skill" --skill
+rtango add upstream-skill --repo owner/repo@abc123:path/to/skill --skill
+
+# Add a collection: import all rules from a local sibling repo
+rtango add shared-tools --local ../shared-tools --col
+
+# Add a collection: import from a GitHub repo (pin to a commit hash)
+rtango add shared-tools --repo owner/shared-tools@abc123 --col
+
+# Collection with include filter (only import named rules)
+rtango add shared-tools --repo owner/shared-tools@abc123 --col --include my-skill --include other-skill
+
+# Collection with schema override (force a specific parser for all imported rules)
+rtango add shared-tools --local ../shared-tools --col --schema copilot
 
 # Specify schema agent when spec has multiple agents
 rtango add my-skill --local .github/skills/my-skill --skill --schema copilot
@@ -144,12 +156,33 @@ rtango sync
 
 ```sh
 # Add a skill from a specific commit
-rtango add code-review --repo "github: addyosmani/agent-skills@abc123:skills/code-review" --skill
+rtango add code-review --repo addyosmani/agent-skills@abc123:skills/code-review --skill
 
 # Preview and sync
 rtango status
 rtango sync
 ```
+
+### Importing a Remote Collection
+
+A **collection** points at another repo's `.rtango/spec.yaml` and imports its rules wholesale. Use the same `--local` or `--repo` source flags, plus `--col`.
+
+```sh
+# Import from a local sibling repo (monorepo, checked-out dependency)
+rtango add team-skills --local ../team-skills --col
+
+# Import from GitHub, pinned to a commit
+rtango add team-skills --repo org/team-skills@abc123 --col
+
+# Only import specific rules from the collection
+rtango add team-skills --repo org/team-skills@abc123 --col --include code-review --include linting
+
+# Preview and sync
+rtango status
+rtango sync
+```
+
+Imported rules are namespaced in the lock as `<collection-id>/<rule-id>` (e.g. `team-skills/code-review`). When two collections import a skill with the same name, rtango detects the path conflict and prompts you to pick an owner — or you can pre-resolve with `rtango own`.
 
 ### CI Gate
 
@@ -243,6 +276,23 @@ rules:
     source: AGENTS.md
     schema_agent: claude-code
     kind: system
+
+  # Local collection: import all rules from a sibling repo
+  - id: team-skills
+    source: ../team-skills
+    schema_agent: claude-code
+    kind: collection
+
+  # Remote collection from GitHub (pinned commit)
+  - id: team-skills
+    source:
+      github: org/team-skills
+      ref: abc123def456
+    schema_agent: claude-code
+    kind: collection
+    include:
+      - code-review   # only import these rule ids
+      - linting
 ```
 
 ## Tips
@@ -253,3 +303,6 @@ rules:
 - **Never hand-edit `.rtango/lock.yaml`** — regenerate it with `rtango sync`.
 - **Use `--rule` to sync a single rule** when iterating on one skill without touching others.
 - **System-kind rules** (like `AGENTS.md`) have no frontmatter — the source content is written verbatim.
+- **Collection rules** use the same `--local`/`--repo` source as any other rule; `--col`/`--collection-kind` is the kind flag. The source must be a directory containing `.rtango/spec.yaml`.
+- **Pin collection GitHub sources to commit hashes** for reproducible builds.
+- **Collection conflicts** work exactly like set-vs-set conflicts — when two rules claim the same target path, rtango prompts you during `sync` or you can pre-resolve with `rtango own`.

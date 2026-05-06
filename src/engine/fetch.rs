@@ -11,6 +11,9 @@ use crate::spec::GithubSource;
 
 const USER_AGENT: &str = concat!("rtango/", env!("CARGO_PKG_VERSION"));
 
+/// Where the rtango spec lives inside a fetched or local collection root.
+pub const COLLECTION_SPEC_PATH: &str = ".rtango/spec.yaml";
+
 /// Materialize a GitHub source on disk and return the path that should be
 /// treated as a "project root" by the expansion pipeline.
 ///
@@ -30,6 +33,24 @@ pub fn fetch_github(source: &GithubSource) -> anyhow::Result<PathBuf> {
     }
 
     Ok(cache_dir)
+}
+
+/// Read the rtango spec from an already-materialised collection root directory.
+///
+/// Used by `expand_collection` after resolving the source (local path or
+/// GitHub cache) to its on-disk location.
+pub fn read_collection_spec(collection_root: &Path) -> anyhow::Result<crate::spec::Spec> {
+    let spec_file = collection_root.join(COLLECTION_SPEC_PATH);
+    if !spec_file.is_file() {
+        anyhow::bail!(
+            "collection directory {} does not contain {}",
+            collection_root.display(),
+            COLLECTION_SPEC_PATH,
+        );
+    }
+    let content = fs::read_to_string(&spec_file)
+        .with_context(|| format!("failed to read {} from {}", COLLECTION_SPEC_PATH, collection_root.display()))?;
+    crate::spec::io::parse_spec_content(&content, &collection_root.display().to_string())
 }
 
 fn parse_owner_repo(slug: &str) -> anyhow::Result<(&str, &str)> {

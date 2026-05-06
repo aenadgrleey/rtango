@@ -34,6 +34,15 @@ pub fn load_spec(root: &Path) -> anyhow::Result<Spec> {
     Ok(spec)
 }
 
+/// Parse a spec from a raw YAML string. Used for loading remote collection specs
+/// that were fetched from GitHub.
+pub fn parse_spec_content(content: &str, source_desc: &str) -> anyhow::Result<Spec> {
+    let spec: Spec = serde_yml::from_str(content)
+        .with_context(|| format!("failed to parse spec from {source_desc}"))?;
+    validate_spec(&spec)?;
+    Ok(spec)
+}
+
 pub fn validate_spec(spec: &Spec) -> anyhow::Result<()> {
     if spec.version != 1 {
         anyhow::bail!(RtangoError::InvalidSpec(format!(

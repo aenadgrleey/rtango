@@ -32,8 +32,14 @@ Binary name is `rtango`.
 # scan repo, detect agents, write .rtango/spec.yaml + lock.yaml
 rtango init
 
-# append a rule
+# append a local skill rule
 rtango add my-skill --local .claude/skills/my-skill --skill
+
+# import all skills from another repo (local path)
+rtango add team-tools --local ../shared-tools --col
+
+# import from a GitHub repo (pinned to a commit)
+rtango add team-tools --repo owner/shared-tools@abc123 --col
 
 # preview the plan
 rtango status
@@ -50,12 +56,12 @@ rtango sync
 | `sync`   | Fetch sources, render per-agent outputs, write files, update the lock. `--check` (CI dry-run), `--adopt` (absorb existing files on first sync), `--force` (override `on_target_modified: fail`), `--rule <id>` (single rule). |
 | `status` | Preview the sync plan without writing. `--verbose` shows up-to-date items too. |
 | `own`    | Record or clear a manual ownership decision when multiple rules target the same path. |
-| `add`    | Mechanically append a rule to the spec. Kinds: `--skill`, `--agent`, `--skill-set`, `--agent-set`, `--system`. |
+| `add`    | Mechanically append a rule to the spec. Kinds: `--skill`, `--agent`, `--skill-set`, `--agent-set`, `--system`, `--collection-kind`/`--col`. |
 
 ## Core concepts
 
 - **Rule** — a `{source, schema_agent, kind}` declaration in `spec.yaml`. Source is a local path or `github: owner/repo@ref:path`. `schema_agent` names the authoritative agent whose format the source is written in.
-- **Kinds** — `skill`, `skill-set`, `agent`, `agent-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md`).
+- **Kinds** — `skill`, `skill-set`, `agent`, `agent-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md`), `collection` (import rules from another repo's `.rtango/spec.yaml`).
 - **Rendering** — for each agent in `spec.agents`, rtango rewrites frontmatter and permission tokens into that agent's native schema and writes to its canonical path. The `schema_agent`'s own target is auto-skipped when source and target paths collide.
 - **Lock** — `.rtango/lock.yaml` records what was written, content hashes, and ownership decisions. Changes to target files detected outside rtango are caught by the `on_target_modified` policy (`fail` / `overwrite` / `skip`).
 
@@ -74,5 +80,22 @@ src/
 demo/        # worked example with .rtango/ and sample skills
 tests/       # integration tests
 ```
+
+## Collections
+
+A **collection** points at another repo's `.rtango/spec.yaml` and imports its declared rules into your project. The source is just a local path or a GitHub ref — the `kind: collection` is what triggers the import.
+
+```sh
+# Local sibling repo
+rtango add team-skills --local ../team-skills --col
+
+# GitHub repo, pinned to a commit
+rtango add team-skills --repo org/team-skills@abc123 --col
+
+# Import only specific rules
+rtango add team-skills --repo org/team-skills@abc123 --col --include code-review
+```
+
+Imported rules are namespaced in the lock as `<collection-id>/<rule-id>`. When two collections produce the same target path, rtango detects the conflict and prompts during `sync` — or use `rtango own <path> <rule-id>` to resolve it non-interactively.
 
 See [AGENTS.md](AGENTS.md) for contributor and agent-facing context.

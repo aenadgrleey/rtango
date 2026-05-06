@@ -7,13 +7,25 @@ use crate::agent::{
 };
 use crate::spec::{Rule, RuleKind, Source};
 
-use super::{ExpandedItem, ExpandedKind, SystemFile, fetch_github, hash_content};
+use super::{ExpandedItem, ExpandedKind, SystemFile, fetch_github, hash_content, read_collection_spec};
 
 /// Expand a single rule into its constituent items by reading source files.
 ///
 /// - `Skill` / `Agent`: produces one item (single file).
 /// - `SkillSet` / `AgentSet`: produces N items (one per source file in the directory).
 pub fn expand_rule(root: &Path, rule: &Rule) -> anyhow::Result<Vec<ExpandedItem>> {
+    match &rule.kind {
+        RuleKind::Collection {
+            include,
+            exclude,
+            schema_override,
+        } => expand_collection(root, rule, include, exclude, schema_override),
+        _ => expand_local_or_github(root, rule),
+    }
+}
+
+/// Handle the non-collection kinds (skill, agent, skill-set, agent-set, system).
+fn expand_local_or_github(root: &Path, rule: &Rule) -> anyhow::Result<Vec<ExpandedItem>> {
     let (project_root, abs_path) = materialize(root, &rule.source)?;
 
     match &rule.kind {
@@ -46,7 +58,70 @@ pub fn expand_rule(root: &Path, rule: &Rule) -> anyhow::Result<Vec<ExpandedItem>
             allowed_tools.as_deref(),
         ),
         RuleKind::System => expand_single_system(rule, &abs_path),
+        RuleKind::Collection { .. } => unreachable!("handled in expand_rule"),
     }
+}
+
+/// Expand a Collection rule: fetch the remote repo, parse its spec.yaml,
+/// and expand each matching rule. Imported rules get their id prefixed with
+/// `<collection_rule_id>/` to avoid collisions with local rules.
+fn expand_collection(
+    root: &Path,
+    rule: &Rule,
+    include: &[String],
+    exclude: &[String],
+    schema_override: &Option<crate::spec::AgentName>,
+) -> anyhow::Result<Vec<ExpandedItem>> {
+    // Resolve the source to an on-disk root, exactly as non-collection rules do.
+    let collection_root = match &rule.source {
+        Source::Local(rel) => {
+            let abs = if rel.is_absolute() { rel.clone() } else { root.join(rel) };
+            if !abs.is_dir() {
+                anyhow::bail!("collection '{}': source directory not found: {}", rule.id, abs.display());
+            }
+            abs
+        }
+        Source::Github(g) => fetch_github(g)?,
+    };
+    let remote_spec = read_collection_spec(&collection_root)?;
+
+    let mut all_items = Vec::new();
+    for remote_rule in &remote_spec.rules {
+        if !collection_passes_filter(&remote_rule.id, include, exclude) {
+            continue;
+        }
+        // Build a synthetic rule that uses the remote rule's definition,
+        // but with an optional schema_agent override from the local collection rule.
+        let effective_schema = schema_override
+            .clone()
+            .unwrap_or_else(|| remote_rule.schema_agent.clone());
+
+        let synthetic = Rule {
+            id: format!("{}/{}", rule.id, remote_rule.id),
+            source: remote_rule.source.clone(),
+            schema_agent: effective_schema,
+            on_target_modified: rule.on_target_modified,
+            kind: remote_rule.kind.clone(),
+        };
+
+        // Expand the synthetic rule using the cache root as the project root
+        let items = expand_local_or_github(&collection_root, &synthetic)?;
+
+        // Re-tag the items so they carry the collection's source for lock tracking
+        for mut item in items {
+            item.rule_id = synthetic.id.clone();
+            all_items.push(item);
+        }
+    }
+    Ok(all_items)
+}
+
+/// Check if a remote rule id passes the collection's include/exclude filter.
+fn collection_passes_filter(rule_id: &str, include: &[String], exclude: &[String]) -> bool {
+    if !include.is_empty() {
+        return include.iter().any(|p| p == rule_id);
+    }
+    !exclude.iter().any(|p| p == rule_id)
 }
 
 /// Decide whether an entry named `name` passes the include/exclude filter.
@@ -98,6 +173,8 @@ fn materialize(root: &Path, source: &Source) -> anyhow::Result<(PathBuf, PathBuf
             };
             Ok((cache_root, filter))
         }
+        // Collection rules are dispatched before reaching materialize.
+        // The Source variants (Local/Github) are handled above for all other kinds.
     }
 }
 

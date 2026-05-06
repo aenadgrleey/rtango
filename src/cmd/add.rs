@@ -6,9 +6,8 @@ use crate::spec::{AgentName, GithubSource, Rule, RuleKind, Source};
 /// Options forwarded from the `rtango add` CLI.
 ///
 /// Exactly one of `local` / `repo` must be set (source); exactly one of
-/// `skill` / `agent` / `skill_set` / `agent_set` must be set (kind). The
-/// override and filter fields are kind-specific and rejected if used with
-/// the wrong kind.
+/// `skill` / `agent` / `skill_set` / `agent_set` / `system` / `collection_kind`
+/// must be set (kind).
 #[derive(Debug, Default)]
 pub struct AddOptions {
     pub id: String,
@@ -19,6 +18,7 @@ pub struct AddOptions {
     pub skill_set: bool,
     pub agent_set: bool,
     pub system: bool,
+    pub collection_kind: bool,
     pub schema: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
@@ -29,10 +29,10 @@ pub struct AddOptions {
 
 /// Append a new rule to `.rtango/spec.yaml`.
 pub fn exec(root: &Path, opts: AddOptions) -> anyhow::Result<()> {
-    let source = match (opts.local, opts.repo) {
-        (Some(p), None) => Source::Local(p),
-        (None, Some(spec)) => Source::Github(parse_repo_spec(&spec)?),
+    let source = match (opts.local.as_ref(), opts.repo.as_ref()) {
         (Some(_), Some(_)) => anyhow::bail!("pass only one of --local/-l or --repo/-r"),
+        (Some(p), None) => Source::Local(p.clone()),
+        (None, Some(spec)) => Source::Github(parse_repo_spec(spec)?),
         (None, None) => anyhow::bail!("source required: pass --local/-l PATH or --repo/-r SPEC"),
     };
 
@@ -42,31 +42,37 @@ pub fn exec(root: &Path, opts: AddOptions) -> anyhow::Result<()> {
         opts.skill_set,
         opts.agent_set,
         opts.system,
+        opts.collection_kind,
     ) {
-        (true, false, false, false, false) => RuleKind::Skill {
+        (true, false, false, false, false, false) => RuleKind::Skill {
             name: opts.name,
             description: opts.description,
             allowed_tools: opts.allowed_tools,
         },
-        (false, true, false, false, false) => RuleKind::Agent {
+        (false, true, false, false, false, false) => RuleKind::Agent {
             name: opts.name,
             description: opts.description,
             allowed_tools: opts.allowed_tools,
         },
-        (false, false, true, false, false) => RuleKind::SkillSet {
+        (false, false, true, false, false, false) => RuleKind::SkillSet {
             include: opts.include,
             exclude: opts.exclude,
         },
-        (false, false, false, true, false) => RuleKind::AgentSet {
+        (false, false, false, true, false, false) => RuleKind::AgentSet {
             include: opts.include,
             exclude: opts.exclude,
         },
-        (false, false, false, false, true) => RuleKind::System,
-        (false, false, false, false, false) => anyhow::bail!(
-            "kind required: pass --skill, --agent, --skill-set/--ss, --agent-set/--as, or --system"
+        (false, false, false, false, true, false) => RuleKind::System,
+        (false, false, false, false, false, true) => RuleKind::Collection {
+            include: opts.include,
+            exclude: opts.exclude,
+            schema_override: opts.schema.as_ref().map(AgentName::new),
+        },
+        (false, false, false, false, false, false) => anyhow::bail!(
+            "kind required: pass --skill, --agent, --skill-set/--ss, --agent-set/--as, --system, or --collection-kind/--col"
         ),
         _ => anyhow::bail!(
-            "pass only one kind of --skill, --agent, --skill-set/--ss, --agent-set/--as, or --system"
+            "pass only one kind of --skill, --agent, --skill-set/--ss, --agent-set/--as, --system, or --collection-kind/--col"
         ),
     };
 
@@ -76,19 +82,39 @@ pub fn exec(root: &Path, opts: AddOptions) -> anyhow::Result<()> {
         anyhow::bail!("rule '{}' already exists in spec", opts.id);
     }
 
-    let schema = match opts.schema {
-        Some(name) => {
-            let name = AgentName::new(name);
-            if !spec.agents.contains(&name) {
-                anyhow::bail!("agent '{}' is not declared in spec.agents", name);
+    // For Collection rules the schema_agent override lives inside the kind.
+    // The top-level schema_agent field is still required — use the first
+    // declared agent as a placeholder (it is never consulted for collections).
+    let schema = if opts.collection_kind {
+        match opts.schema {
+            Some(ref name) => {
+                let name = AgentName::new(name);
+                if !spec.agents.contains(&name) {
+                    anyhow::bail!("agent '{}' is not declared in spec.agents", name);
+                }
+                name
             }
-            name
+            None => match spec.agents.as_slice() {
+                [only] => only.clone(),
+                [] => AgentName::new("plain"),
+                _ => spec.agents[0].clone(),
+            },
         }
-        None => match spec.agents.as_slice() {
-            [only] => only.clone(),
-            [] => anyhow::bail!("spec has no agents; cannot infer schema_agent"),
-            _ => anyhow::bail!("spec has multiple agents; specify one with --schema/-g"),
-        },
+    } else {
+        match opts.schema {
+            Some(name) => {
+                let name = AgentName::new(name);
+                if !spec.agents.contains(&name) {
+                    anyhow::bail!("agent '{}' is not declared in spec.agents", name);
+                }
+                name
+            }
+            None => match spec.agents.as_slice() {
+                [only] => only.clone(),
+                [] => anyhow::bail!("spec has no agents; cannot infer schema_agent"),
+                _ => anyhow::bail!("spec has multiple agents; specify one with --schema/-g"),
+            },
+        }
     };
 
     spec.rules.push(Rule {
@@ -104,8 +130,7 @@ pub fn exec(root: &Path, opts: AddOptions) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Parse `owner/repo[@ref][:path]` into a `GithubSource`. Unset fields fall
-/// back to `GithubSource` defaults (`ref = "main"`, empty path).
+/// Parse `owner/repo[@ref][:path]` into a `GithubSource`.
 fn parse_repo_spec(s: &str) -> anyhow::Result<GithubSource> {
     let (head, path) = match s.split_once(':') {
         Some((h, p)) => (h, p.to_string()),

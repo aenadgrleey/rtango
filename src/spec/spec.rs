@@ -58,7 +58,7 @@ pub struct Rule {
     pub kind: RuleKind,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum RuleKind {
     Skill {
@@ -89,10 +89,26 @@ pub enum RuleKind {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         exclude: Vec<String>,
     },
-    /// A single root-level instruction file (CLAUDE.md, AGENTS.md, etc.).
+    /// A root-level instruction file (CLAUDE.md, AGENTS.md, etc.).
     /// Source is one markdown file, written verbatim to the per-agent
     /// convention path with no frontmatter rewriting.
     System,
+
+    /// A remote rtango collection: imports all (or filtered) rules from
+    /// another repo's `.rtango/spec.yaml`. The `source` must be
+    /// `Source::Collection`.
+    Collection {
+        /// Only import rules whose id matches one of these names.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        include: Vec<String>,
+        /// Exclude rules whose id matches one of these names.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        exclude: Vec<String>,
+        /// Override the schema_agent for all imported rules. If absent,
+        /// each imported rule uses its own schema_agent from the remote spec.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        schema_override: Option<AgentName>,
+    },
 }
 
 impl RuleKind {
@@ -124,5 +140,12 @@ impl RuleKind {
     }
     pub fn system() -> Self {
         RuleKind::System
+    }
+    pub fn collection() -> Self {
+        RuleKind::Collection {
+            include: Vec::new(),
+            exclude: Vec::new(),
+            schema_override: None,
+        }
     }
 }

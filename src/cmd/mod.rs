@@ -86,7 +86,8 @@ pub enum Command {
         /// Rule id (must be unique within the spec)
         id: String,
 
-        /// Local source path (directory or file, relative to root)
+        /// Local source path (directory or file, relative to root).
+        /// Combine with --collection-kind/--col to treat a local directory as a collection.
         #[arg(
             short = 'l',
             long = "local",
@@ -95,7 +96,8 @@ pub enum Command {
         )]
         local: Option<std::path::PathBuf>,
 
-        /// GitHub source: owner/repo[@ref][:path]
+        /// GitHub source: owner/repo[@ref][:path].
+        /// Combine with --collection-kind/--col to treat a GitHub repo as a collection.
         #[arg(
             short = 'r',
             long = "repo",
@@ -107,14 +109,14 @@ pub enum Command {
         /// Kind is a single skill
         #[arg(
             long = "skill",
-            conflicts_with_all = ["agent", "skill_set", "agent_set", "system"]
+            conflicts_with_all = ["agent", "skill_set", "agent_set", "system", "collection_kind"]
         )]
         skill: bool,
 
         /// Kind is a single agent
         #[arg(
             long = "agent",
-            conflicts_with_all = ["skill", "skill_set", "agent_set", "system"]
+            conflicts_with_all = ["skill", "skill_set", "agent_set", "system", "collection_kind"]
         )]
         agent: bool,
 
@@ -122,7 +124,7 @@ pub enum Command {
         #[arg(
             long = "skill-set",
             visible_alias = "ss",
-            conflicts_with_all = ["skill", "agent", "agent_set", "system"]
+            conflicts_with_all = ["skill", "agent", "agent_set", "system", "collection_kind"]
         )]
         skill_set: bool,
 
@@ -130,7 +132,7 @@ pub enum Command {
         #[arg(
             long = "agent-set",
             visible_alias = "as",
-            conflicts_with_all = ["skill", "agent", "skill_set", "system"]
+            conflicts_with_all = ["skill", "agent", "skill_set", "system", "collection_kind"]
         )]
         agent_set: bool,
 
@@ -138,13 +140,25 @@ pub enum Command {
         #[arg(
             long = "system",
             conflicts_with_all = [
-                "skill", "agent", "skill_set", "agent_set",
+                "skill", "agent", "skill_set", "agent_set", "collection_kind",
                 "name", "description", "allowed_tools", "include", "exclude",
             ]
         )]
         system: bool,
 
+        /// Kind is a remote rtango collection (imports rules from a remote spec.yaml)
+        #[arg(
+            long = "collection-kind",
+            visible_alias = "col",
+            conflicts_with_all = [
+                "skill", "agent", "skill_set", "agent_set", "system",
+                "name", "description", "allowed_tools",
+            ]
+        )]
+        collection_kind: bool,
+
         /// Schema agent for the rule (required when spec has >1 agent)
+        /// For collections, overrides the schema_agent for all imported rules.
         #[arg(short = 'g', long = "schema", value_name = "AGENT")]
         schema: Option<String>,
 
@@ -152,7 +166,7 @@ pub enum Command {
         #[arg(
             long = "name",
             value_name = "NAME",
-            conflicts_with_all = ["skill_set", "agent_set"]
+            conflicts_with_all = ["skill_set", "agent_set", "collection_kind"]
         )]
         name: Option<String>,
 
@@ -160,7 +174,7 @@ pub enum Command {
         #[arg(
             long = "description",
             value_name = "TEXT",
-            conflicts_with_all = ["skill_set", "agent_set"]
+            conflicts_with_all = ["skill_set", "agent_set", "collection_kind"]
         )]
         description: Option<String>,
 
@@ -168,11 +182,11 @@ pub enum Command {
         #[arg(
             long = "allowed-tools",
             value_name = "TOOLS",
-            conflicts_with_all = ["skill_set", "agent_set"]
+            conflicts_with_all = ["skill_set", "agent_set", "collection_kind"]
         )]
         allowed_tools: Option<String>,
 
-        /// Only include entries matching NAME (set kinds only, repeatable)
+        /// Only include entries matching NAME (set and collection kinds, repeatable)
         #[arg(
             long = "include",
             value_name = "NAME",
@@ -180,7 +194,7 @@ pub enum Command {
         )]
         include: Vec<String>,
 
-        /// Exclude entries matching NAME (set kinds only, repeatable)
+        /// Exclude entries matching NAME (set and collection kinds, repeatable)
         #[arg(
             long = "exclude",
             value_name = "NAME",
@@ -216,6 +230,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             skill_set,
             agent_set,
             system,
+            collection_kind,
             schema,
             name,
             description,
@@ -233,6 +248,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
                 skill_set,
                 agent_set,
                 system,
+                collection_kind,
                 schema,
                 name,
                 description,
