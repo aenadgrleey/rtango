@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/aenadgrleey/rtango/compare/v0.2.0...v0.3.0) - 2026-05-06
+
+### Added
+
+- add collection kind for importing rules from external rtango specs
+
 ### Added
 
 - `kind: collection` rule — point at any local path or GitHub repo that contains a `.rtango/spec.yaml` and all its rules are imported and rendered into the local project's agents
