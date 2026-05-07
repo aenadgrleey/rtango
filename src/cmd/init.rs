@@ -3,11 +3,17 @@ use std::path::Path;
 use anyhow::bail;
 
 use crate::agent::{self, SourceKind};
+use crate::engine::{compute_plan, managed_gitignore_entries};
 use crate::error::RtangoError;
-use crate::spec::io::{lock_path, rtango_dir, spec_path};
+use crate::spec::io::{gitignore_update, lock_path, rtango_dir, spec_path, write_gitignore};
 use crate::spec::{AgentName, Defaults, Lock, Rule, RuleKind, Source, Spec};
 
-pub fn exec(root: &Path, force: bool, no_detect: bool) -> anyhow::Result<()> {
+pub fn exec(
+    root: &Path,
+    force: bool,
+    no_detect: bool,
+    gitignore_targets: bool,
+) -> anyhow::Result<()> {
     let spec_path = spec_path(root);
     let lock_path = lock_path(root);
 
@@ -46,7 +52,10 @@ pub fn exec(root: &Path, force: bool, no_detect: bool) -> anyhow::Result<()> {
     let spec = Spec {
         version: 1,
         agents: agent_names.clone(),
-        defaults: Defaults::default(),
+        defaults: Defaults {
+            gitignore_targets,
+            ..Defaults::default()
+        },
         rules,
     };
 
@@ -63,6 +72,14 @@ pub fn exec(root: &Path, force: bool, no_detect: bool) -> anyhow::Result<()> {
     std::fs::create_dir_all(rtango_dir(root))?;
     std::fs::write(&spec_path, &spec_yaml)?;
     std::fs::write(&lock_path, &lock_yaml)?;
+
+    if gitignore_targets {
+        let plan = compute_plan(root, &spec, &lock, true, true)?;
+        let update = gitignore_update(root, &managed_gitignore_entries(&plan, None))?;
+        if update.changed {
+            write_gitignore(root, &update.content)?;
+        }
+    }
 
     Ok(())
 }

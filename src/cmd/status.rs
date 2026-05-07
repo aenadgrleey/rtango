@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use crate::engine::{DeploymentStatus, compute_plan};
-use crate::spec::io::{load_lock_or_empty, load_spec};
+use crate::engine::{DeploymentStatus, compute_plan, managed_gitignore_entries};
+use crate::spec::io::{gitignore_update, load_lock_or_empty, load_spec};
 
 pub fn exec(root: &Path, rule: Option<String>, verbose: bool) -> anyhow::Result<()> {
     let spec = load_spec(root)?;
@@ -17,12 +17,26 @@ pub fn exec(root: &Path, rule: Option<String>, verbose: bool) -> anyhow::Result<
         })
         .collect();
 
-    print_plan(&items, verbose);
+    let gitignore = if spec.defaults.gitignore_targets {
+        Some(gitignore_update(
+            root,
+            &managed_gitignore_entries(&plan, rule.as_deref()),
+        )?)
+    } else {
+        None
+    };
+
+    print_plan(&items, verbose, gitignore.as_ref());
 
     Ok(())
 }
 
-fn print_plan(items: &[&crate::engine::PlannedDeployment], verbose: bool) {
+fn print_plan(
+    items: &[&crate::engine::PlannedDeployment],
+    verbose: bool,
+    gitignore: Option<&crate::spec::io::GitignoreUpdate>,
+) {
+
     let mut creates = 0usize;
     let mut updates = 0usize;
     let mut conflicts = 0usize;
@@ -53,6 +67,21 @@ fn print_plan(items: &[&crate::engine::PlannedDeployment], verbose: bool) {
                     println!("  up-to-date {}", item.target_path.display());
                 }
             }
+        }
+    }
+
+    if let Some(update) = gitignore {
+        if update.changed {
+            if update.existed {
+                updates += 1;
+                println!("  update   .gitignore");
+            } else {
+                creates += 1;
+                println!("  create   .gitignore");
+            }
+        } else if verbose {
+            up_to_date += 1;
+            println!("  up-to-date .gitignore");
         }
     }
 

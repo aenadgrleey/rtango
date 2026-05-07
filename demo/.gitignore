@@ -1,0 +1,9 @@
+# >>> rtango managed targets >>>
+.claude/agents/reviewer.agent.md
+.claude/agents/test-runner.agent.md
+.claude/skills/code-review-and-quality/
+.claude/skills/code-review/
+.claude/skills/deploy/
+.github/skills/code-review-and-quality/
+.github/skills/git-helper/
+# <<< rtango managed targets <<<

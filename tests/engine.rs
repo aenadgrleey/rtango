@@ -5,7 +5,7 @@ use tempfile::TempDir;
 
 use rtango::engine::{
     DeploymentStatus, ExpandedKind, Plan, compute_plan, execute_plan, expand_rule, hash_content,
-    render_for_agent,
+    managed_gitignore_entries, render_for_agent,
 };
 use rtango::spec::{
     AgentName, Defaults, Deployment, Lock, OnTargetModified, Rule, RuleKind, Source, Spec,
@@ -1111,4 +1111,23 @@ fn builtin_skips_source_dirs_of_user_rules() {
         builtin_items.len() >= 1,
         "should write to at least one agent"
     );
+}
+
+#[test]
+fn managed_gitignore_entries_exclude_builtins() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "body\n");
+
+    let spec = make_spec(
+        vec!["claude-code"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    let lock = empty_lock();
+
+    let plan = compute_plan(root, &spec, &lock, false, true).unwrap();
+    let entries = managed_gitignore_entries(&plan, None);
+
+    assert!(entries.contains(&".claude/skills/my-skill/".to_string()));
+    assert!(!entries.iter().any(|e| e.contains("rtango")));
 }

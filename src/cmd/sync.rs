@@ -3,9 +3,12 @@ use std::path::Path;
 
 use crate::engine::{
     AmbiguousPath, DeploymentStatus, Plan, compute_plan, execute_plan, find_ambiguities,
+    managed_gitignore_entries,
 };
 use crate::spec::Ownership;
-use crate::spec::io::{load_lock_or_empty, load_spec, save_lock};
+use crate::spec::io::{
+    gitignore_update, load_lock_or_empty, load_spec, save_lock, write_gitignore,
+};
 
 /// Strategy for resolving set-vs-set ambiguity during `sync`. `None` from
 /// `choose_owner` means the user declined to pick — sync aborts with the
@@ -107,6 +110,14 @@ pub fn exec_with_prompter(
     }
 
     let plan = compute_plan(root, &spec, &lock, force || adopt, true)?;
+    let gitignore = if spec.defaults.gitignore_targets {
+        Some(gitignore_update(
+            root,
+            &managed_gitignore_entries(&plan, rule.as_deref()),
+        )?)
+    } else {
+        None
+    };
 
     // If filtering by rule, partition the plan items. Owners are always
     // carried through whole-spec so a per-rule sync doesn't drop unrelated
@@ -134,11 +145,17 @@ pub fn exec_with_prompter(
     let mut updates = 0usize;
     let mut orphans = 0usize;
 
-    let is_clean = filtered_plan.is_clean();
+    let mut is_clean = filtered_plan.is_clean();
 
     if is_clean {
-        println!("Already up to date.");
-    } else {
+        if gitignore.as_ref().is_some_and(|update| update.changed) {
+            is_clean = false;
+        } else {
+            println!("Already up to date.");
+        }
+    }
+
+    if !is_clean {
         for item in &filtered_plan.items {
             match &item.status {
                 DeploymentStatus::Create => {
@@ -159,6 +176,18 @@ pub fn exec_with_prompter(
                 DeploymentStatus::UpToDate => {}
             }
         }
+
+        if let Some(update) = &gitignore {
+            if update.changed {
+                if update.existed {
+                    updates += 1;
+                    println!("  update   .gitignore");
+                } else {
+                    creates += 1;
+                    println!("  create   .gitignore");
+                }
+            }
+        }
     }
 
     if check {
@@ -170,6 +199,12 @@ pub fn exec_with_prompter(
 
     // Execute the plan
     let mut new_lock = execute_plan(root, &filtered_plan, &lock, false)?;
+
+    if let Some(update) = &gitignore {
+        if update.changed {
+            write_gitignore(root, &update.content)?;
+        }
+    }
 
     // If we filtered by rule, merge back lock entries for unaffected rules
     if is_rule_filtered {

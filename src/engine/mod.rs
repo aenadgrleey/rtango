@@ -9,7 +9,8 @@ pub use expand::*;
 pub use fetch::{fetch_github, read_collection_spec};
 pub use plan::*;
 
-use std::path::PathBuf;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 
 use crate::spec::{AgentName, OnTargetModified, Ownership, Source};
 
@@ -128,4 +129,41 @@ pub fn effective_policy(
     default: OnTargetModified,
 ) -> OnTargetModified {
     rule_policy.unwrap_or(default)
+}
+
+/// Compute the precise .gitignore entries for user-managed projected targets
+/// in the current plan.
+///
+/// - Skills are ignored as leaf directories (`.pi/skills/foo/`), not whole
+///   agent roots like `.pi/` or `.pi/skills/`.
+/// - Agents and system files are ignored as individual files.
+/// - Orphans are excluded because the current spec no longer manages them.
+/// - Built-ins are excluded: the managed block reflects only user rule
+///   projections.
+/// - When `rule_filter` is set, only projections owned by that rule are
+///   included. This keeps `status --rule ...` and `sync --rule ...` scoped to
+///   the selected rule.
+pub fn managed_gitignore_entries(plan: &Plan, rule_filter: Option<&str>) -> Vec<String> {
+    let mut entries = BTreeSet::new();
+
+    for item in &plan.items {
+        if item.status == DeploymentStatus::Orphan || item.rule_id == builtin::BUILTIN_RTANGO_RULE_ID
+        {
+            continue;
+        }
+        if rule_filter.is_some_and(|rule_id| item.rule_id != rule_id) {
+            continue;
+        }
+        entries.insert(gitignore_entry_for_target(&item.target_path));
+    }
+
+    entries.into_iter().collect()
+}
+
+fn gitignore_entry_for_target(target_path: &Path) -> String {
+    let normalized = target_path.to_string_lossy().replace('\\', "/");
+    if let Some(parent) = normalized.strip_suffix("/SKILL.md") {
+        return format!("{parent}/");
+    }
+    normalized
 }

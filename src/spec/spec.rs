@@ -36,6 +36,8 @@ impl std::fmt::Display for AgentName {
 pub struct Defaults {
     #[serde(default)]
     pub on_target_modified: OnTargetModified,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub gitignore_targets: bool,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

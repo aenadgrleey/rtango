@@ -4,6 +4,7 @@ agents:
   - copilot
 defaults:
   on_target_modified: fail
+  gitignore_targets: true
 rules:
   # copilot → claude-code: skill set authored in copilot's .github/skills/.
   # The copilot self-target is auto-skipped because source path == target path.

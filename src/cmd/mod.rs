@@ -29,6 +29,10 @@ pub enum Command {
         /// Skip auto-detection, create an empty spec skeleton
         #[arg(short, long)]
         no_detect: bool,
+
+        /// Keep generated targets in a managed .gitignore block
+        #[arg(long)]
+        gitignore_targets: bool,
     },
 
     /// Bring target files in sync with the spec
@@ -207,7 +211,11 @@ pub enum Command {
 pub fn run(cli: Cli) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     match cli.command {
-        Command::Init { force, no_detect } => init::exec(&root, force, no_detect),
+        Command::Init {
+            force,
+            no_detect,
+            gitignore_targets,
+        } => init::exec(&root, force, no_detect, gitignore_targets),
         Command::Sync {
             check,
             force,

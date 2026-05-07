@@ -26,9 +26,10 @@ rtango is a package manager for AI-agent configuration. You author a skill or in
 Scan the project, detect installed agents, and bootstrap `.rtango/spec.yaml` + `.rtango/lock.yaml`.
 
 ```sh
-rtango init           # detect agents and create spec
-rtango init --force   # overwrite existing spec
+rtango init              # detect agents and create spec
+rtango init --force      # overwrite existing spec
 rtango init --no-detect  # create empty skeleton without auto-detection
+rtango init --gitignore-targets  # also manage a .gitignore block for projected targets
 ```
 
 Run this once when setting up rtango in a new project.
@@ -94,6 +95,8 @@ The output labels each target file:
 - **orphan** — target exists in the lock but its rule/source was removed from the spec.
 - **up-to-date** — nothing to do (shown only with `--verbose`).
 
+If `defaults.gitignore_targets: true`, `status` also reports `.gitignore` when the managed rtango block would change.
+
 ### `rtango sync`
 
 Execute the sync plan: fetch remote sources, render per-agent outputs, write files, and update the lock.
@@ -111,6 +114,8 @@ rtango sync --rule my-skill  # only sync one rule
 **`--adopt`** is useful when you already have target files that match what rtango would generate. Instead of treating them as conflicts, adopt records them in the lock as if they had been synced.
 
 **`--force`** overwrites files even when the `on_target_modified` policy is `fail`. Use with care — it discards any local edits made since the last sync.
+
+If `defaults.gitignore_targets: true`, `sync` also maintains a dedicated managed block in `.gitignore` for projected targets from user rules. Skill projections are ignored as concrete skill directories (for example `.pi/skills/reviewer/`), while agent and system projections are ignored as exact files. Broad parents like `.pi/` or `.pi/skills/` are never ignored.
 
 ### `rtango own`
 
@@ -247,6 +252,7 @@ agents:
 
 defaults:
   on_target_modified: fail  # fail | overwrite | skip
+  gitignore_targets: true   # maintain a managed .gitignore block for projected targets
 
 rules:
   # Local skill-set
@@ -306,3 +312,11 @@ rules:
 - **Collection rules** use the same `--local`/`--repo` source as any other rule; `--col`/`--collection-kind` is the kind flag. The source must be a directory containing `.rtango/spec.yaml`.
 - **Pin collection GitHub sources to commit hashes** for reproducible builds.
 - **Collection conflicts** work exactly like set-vs-set conflicts — when two rules claim the same target path, rtango prompts you during `sync` or you can pre-resolve with `rtango own`.
+- **If a repo uses rtango, leave clear signals for future agents**: commit `.rtango/spec.yaml`, usually commit `.rtango/lock.yaml`, and add a short note in `AGENTS.md`, `CLAUDE.md`, or `README.md` telling agents to use `rtango status` and `rtango sync` after changing shared agent files.
+- **Prefer explicit agent-facing wording** such as:
+  ```md
+  This repo uses rtango to manage agent skills/instructions.
+  After changing shared agent files or `.rtango/spec.yaml`, run:
+  - `rtango status`
+  - `rtango sync`
+  ```

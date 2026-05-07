@@ -231,7 +231,7 @@ mod exec {
             "---\nname: foo\n---\n",
         );
 
-        init::exec(tmp.path(), false, false).unwrap();
+        init::exec(tmp.path(), false, false, false).unwrap();
 
         assert!(tmp.path().join(".rtango/spec.yaml").exists());
         assert!(tmp.path().join(".rtango/lock.yaml").exists());
@@ -249,7 +249,7 @@ mod exec {
             "version: 1\nagents: []\n",
         );
 
-        let result = init::exec(tmp.path(), false, false);
+        let result = init::exec(tmp.path(), false, false, false);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("already exists"));
@@ -267,7 +267,7 @@ mod exec {
             "version: 1\nagents: []\n",
         );
 
-        init::exec(tmp.path(), true, false).unwrap();
+        init::exec(tmp.path(), true, false, false).unwrap();
 
         let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("claude-code"));
@@ -277,7 +277,7 @@ mod exec {
     fn fails_if_no_agents_detected() {
         let tmp = tempfile::tempdir().unwrap();
 
-        let result = init::exec(tmp.path(), false, false);
+        let result = init::exec(tmp.path(), false, false, false);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("no agents"));
@@ -291,7 +291,7 @@ mod exec {
             "---\nname: foo\n---\n",
         );
 
-        init::exec(tmp.path(), false, true).unwrap();
+        init::exec(tmp.path(), false, true, false).unwrap();
 
         let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("agents: []"));
@@ -307,7 +307,7 @@ mod exec {
             "---\nname: foo\n---\nbody",
         );
 
-        init::exec(tmp.path(), false, false).unwrap();
+        init::exec(tmp.path(), false, false, false).unwrap();
 
         let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("claude-code"));
@@ -323,7 +323,7 @@ mod exec {
             "---\nname: foo\n---\n",
         );
 
-        init::exec(tmp.path(), false, false).unwrap();
+        init::exec(tmp.path(), false, false, false).unwrap();
 
         let content = fs::read_to_string(tmp.path().join(".rtango/lock.yaml")).unwrap();
         assert!(content.contains("version: 1"));
@@ -338,9 +338,36 @@ mod exec {
             "---\nname: foo\n---\n",
         );
 
-        init::exec(tmp.path(), false, false).unwrap();
+        init::exec(tmp.path(), false, false, false).unwrap();
 
         let content = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
         assert!(content.contains("version: 1"));
+    }
+
+    #[test]
+    fn gitignore_targets_writes_precise_entries() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_file(
+            &tmp.path().join(".claude/skills/foo/SKILL.md"),
+            "---\nname: foo\n---\nclaude body\n",
+        );
+        write_file(
+            &tmp.path().join(".github/skills/bar/SKILL.md"),
+            "---\nname: bar\n---\ncopilot body\n",
+        );
+
+        init::exec(tmp.path(), false, false, true).unwrap();
+
+        let spec = fs::read_to_string(tmp.path().join(".rtango/spec.yaml")).unwrap();
+        assert!(spec.contains("gitignore_targets: true"));
+
+        let gitignore = fs::read_to_string(tmp.path().join(".gitignore")).unwrap();
+        assert!(gitignore.contains(".github/skills/foo/"));
+        assert!(gitignore.contains(".claude/skills/bar/"));
+        assert!(!gitignore.contains(".claude/\n"));
+        assert!(!gitignore.contains(".github/\n"));
+        assert!(!gitignore.contains(".claude/skills/foo/"));
+        assert!(!gitignore.contains(".github/skills/bar/"));
+        assert!(!gitignore.contains("/skills/rtango/"));
     }
 }

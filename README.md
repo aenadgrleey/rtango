@@ -52,8 +52,8 @@ rtango sync
 
 | Command  | Purpose |
 | -------- | ------- |
-| `init`   | Detect installed agents and bootstrap `.rtango/spec.yaml` + `.rtango/lock.yaml`. |
-| `sync`   | Fetch sources, render per-agent outputs, write files, update the lock. `--check` (CI dry-run), `--adopt` (absorb existing files on first sync), `--force` (override `on_target_modified: fail`), `--rule <id>` (single rule). |
+| `init`   | Detect installed agents and bootstrap `.rtango/spec.yaml` + `.rtango/lock.yaml`. `--gitignore-targets` adds a managed `.gitignore` block for generated targets. |
+| `sync`   | Fetch sources, render per-agent outputs, write files, update the lock. `--check` (CI dry-run), `--adopt` (absorb existing files on first sync), `--force` (override `on_target_modified: fail`), `--rule <id>` (single rule). When `defaults.gitignore_targets: true`, sync also maintains a managed `.gitignore` block. |
 | `status` | Preview the sync plan without writing. `--verbose` shows up-to-date items too. |
 | `own`    | Record or clear a manual ownership decision when multiple rules target the same path. |
 | `add`    | Mechanically append a rule to the spec. Kinds: `--skill`, `--agent`, `--skill-set`, `--agent-set`, `--system`, `--collection-kind`/`--col`. |
@@ -64,6 +64,26 @@ rtango sync
 - **Kinds** — `skill`, `skill-set`, `agent`, `agent-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md`), `collection` (import rules from another repo's `.rtango/spec.yaml`).
 - **Rendering** — for each agent in `spec.agents`, rtango rewrites frontmatter and permission tokens into that agent's native schema and writes to its canonical path. The `schema_agent`'s own target is auto-skipped when source and target paths collide.
 - **Lock** — `.rtango/lock.yaml` records what was written, content hashes, and ownership decisions. Changes to target files detected outside rtango are caught by the `on_target_modified` policy (`fail` / `overwrite` / `skip`).
+- **Managed `.gitignore`** — optionally keep user-managed projected targets in a dedicated rtango block. Skill projections are ignored precisely as leaf directories (for example `.pi/skills/reviewer/`), while agent/system projections are ignored as exact files; broad roots like `.pi/` are never ignored.
+
+## Repository signals for agents
+
+If a repo uses rtango, make that obvious so coding agents know they should sync managed skills instead of hand-editing generated copies.
+
+Recommended signals to commit:
+- `.rtango/spec.yaml` — the strongest signal that rtango manages agent files here.
+- `.rtango/lock.yaml` — shows the repo is actively synced.
+- A short note in `AGENTS.md`, `CLAUDE.md`, or `README.md` telling agents to use `rtango status` / `rtango sync` after changing shared skills or instructions.
+- Optionally `defaults.gitignore_targets: true` so projected outputs stay ignored consistently across machines.
+
+A good agent-facing note is:
+
+```md
+This repo uses rtango to manage agent skills/instructions.
+After changing shared agent files or `.rtango/spec.yaml`, run:
+- `rtango status`
+- `rtango sync`
+```
 
 ## Supported agents
 

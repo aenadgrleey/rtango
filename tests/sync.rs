@@ -24,10 +24,14 @@ fn write_spec(root: &Path, spec: &Spec) {
 }
 
 fn make_spec(agents: Vec<&str>, rules: Vec<Rule>) -> Spec {
+    make_spec_with_defaults(agents, Defaults::default(), rules)
+}
+
+fn make_spec_with_defaults(agents: Vec<&str>, defaults: Defaults, rules: Vec<Rule>) -> Spec {
     Spec {
         version: 1,
         agents: agents.into_iter().map(AgentName::new).collect(),
-        defaults: Defaults::default(),
+        defaults,
         rules,
     }
 }
@@ -349,4 +353,132 @@ fn adopt_mode_adopts_existing_files() {
     // Verify lock was created
     let lock = load_lock(root).unwrap();
     assert_eq!(lock.deployments.len(), 1);
+}
+
+#[test]
+fn sync_updates_gitignore_precisely_when_enabled() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    setup_copilot_skill(root, "deploy", "Deploy instructions");
+
+    let spec = make_spec_with_defaults(
+        vec!["copilot", "claude-code"],
+        Defaults {
+            gitignore_targets: true,
+            ..Defaults::default()
+        },
+        vec![single_skill_rule("deploy", ".github/skills/deploy", "copilot")],
+    );
+    write_spec(root, &spec);
+
+    rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
+
+    let gitignore = fs::read_to_string(root.join(".gitignore")).unwrap();
+    assert!(gitignore.contains("# >>> rtango managed targets >>>"));
+    assert!(gitignore.contains(".claude/skills/deploy/"));
+    assert!(!gitignore.contains(".claude/\n"));
+    assert!(!gitignore.contains(".claude/skills/\n"));
+    assert!(!gitignore.contains(".github/skills/deploy/"));
+    assert!(!gitignore.contains("/skills/rtango/"));
+}
+
+#[test]
+fn check_mode_fails_when_managed_gitignore_is_out_of_date() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    setup_copilot_skill(root, "deploy", "Deploy instructions");
+
+    let spec = make_spec_with_defaults(
+        vec!["copilot", "claude-code"],
+        Defaults {
+            gitignore_targets: true,
+            ..Defaults::default()
+        },
+        vec![single_skill_rule("deploy", ".github/skills/deploy", "copilot")],
+    );
+    write_spec(root, &spec);
+
+    rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
+    fs::write(root.join(".gitignore"), "").unwrap();
+
+    let err = rtango::cmd::sync::exec(root, true, false, None, false).unwrap_err();
+    assert!(err.to_string().contains("not in sync"));
+}
+
+#[test]
+fn rule_filtered_check_ignores_unrelated_gitignore_changes() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    setup_copilot_skill(root, "alpha", "Alpha body");
+
+    let initial_spec = make_spec_with_defaults(
+        vec!["copilot", "claude-code"],
+        Defaults {
+            gitignore_targets: true,
+            ..Defaults::default()
+        },
+        vec![single_skill_rule("rule-alpha", ".github/skills/alpha", "copilot")],
+    );
+    write_spec(root, &initial_spec);
+    rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
+
+    setup_copilot_skill(root, "beta", "Beta body");
+    let updated_spec = make_spec_with_defaults(
+        vec!["copilot", "claude-code"],
+        Defaults {
+            gitignore_targets: true,
+            ..Defaults::default()
+        },
+        vec![
+            single_skill_rule("rule-alpha", ".github/skills/alpha", "copilot"),
+            single_skill_rule("rule-beta", ".github/skills/beta", "copilot"),
+        ],
+    );
+    write_spec(root, &updated_spec);
+
+    rtango::cmd::sync::exec(root, true, false, Some("rule-alpha".into()), false).unwrap();
+}
+
+#[test]
+fn rule_filtered_sync_does_not_write_gitignore_entries_for_other_rules() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    setup_copilot_skill(root, "alpha", "Alpha body");
+
+    let initial_spec = make_spec_with_defaults(
+        vec!["copilot", "claude-code"],
+        Defaults {
+            gitignore_targets: true,
+            ..Defaults::default()
+        },
+        vec![single_skill_rule("rule-alpha", ".github/skills/alpha", "copilot")],
+    );
+    write_spec(root, &initial_spec);
+    rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
+
+    let gitignore_before = fs::read_to_string(root.join(".gitignore")).unwrap();
+
+    setup_copilot_skill(root, "beta", "Beta body");
+    let updated_spec = make_spec_with_defaults(
+        vec!["copilot", "claude-code"],
+        Defaults {
+            gitignore_targets: true,
+            ..Defaults::default()
+        },
+        vec![
+            single_skill_rule("rule-alpha", ".github/skills/alpha", "copilot"),
+            single_skill_rule("rule-beta", ".github/skills/beta", "copilot"),
+        ],
+    );
+    write_spec(root, &updated_spec);
+
+    rtango::cmd::sync::exec(root, false, false, Some("rule-alpha".into()), false).unwrap();
+
+    let gitignore_after = fs::read_to_string(root.join(".gitignore")).unwrap();
+    assert_eq!(gitignore_after, gitignore_before);
+    assert!(!root.join(".claude/skills/beta/SKILL.md").exists());
 }

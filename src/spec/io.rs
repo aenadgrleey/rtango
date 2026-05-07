@@ -11,6 +11,16 @@ use super::{Lock, Spec};
 const RTANGO_DIR: &str = ".rtango";
 const SPEC_FILE: &str = "spec.yaml";
 const LOCK_FILE: &str = "lock.yaml";
+const GITIGNORE_FILE: &str = ".gitignore";
+const GITIGNORE_START: &str = "# >>> rtango managed targets >>>";
+const GITIGNORE_END: &str = "# <<< rtango managed targets <<<";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitignoreUpdate {
+    pub existed: bool,
+    pub changed: bool,
+    pub content: String,
+}
 
 pub fn rtango_dir(root: &Path) -> std::path::PathBuf {
     root.join(RTANGO_DIR)
@@ -22,6 +32,10 @@ pub fn spec_path(root: &Path) -> std::path::PathBuf {
 
 pub fn lock_path(root: &Path) -> std::path::PathBuf {
     rtango_dir(root).join(LOCK_FILE)
+}
+
+pub fn gitignore_path(root: &Path) -> std::path::PathBuf {
+    root.join(GITIGNORE_FILE)
 }
 
 pub fn load_spec(root: &Path) -> anyhow::Result<Spec> {
@@ -109,4 +123,121 @@ pub fn save_lock(root: &Path, lock: &Lock) -> anyhow::Result<()> {
     let yaml = serde_yml::to_string(lock)?;
     fs::write(&path, yaml).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
+}
+
+pub fn gitignore_update(root: &Path, entries: &[String]) -> anyhow::Result<GitignoreUpdate> {
+    let path = gitignore_path(root);
+    let existed = path.exists();
+    let existing = if existed {
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?
+    } else {
+        String::new()
+    };
+    let content = render_gitignore(&existing, entries)?;
+    let changed = content != existing;
+    Ok(GitignoreUpdate {
+        existed,
+        changed,
+        content,
+    })
+}
+
+pub fn write_gitignore(root: &Path, content: &str) -> anyhow::Result<()> {
+    let path = gitignore_path(root);
+    fs::write(&path, content).with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
+}
+
+fn render_gitignore(existing: &str, entries: &[String]) -> anyhow::Result<String> {
+    let mut preserved = Vec::new();
+    let mut in_managed_block = false;
+    let mut saw_start = false;
+    let mut saw_end = false;
+
+    for line in existing.lines() {
+        if line == GITIGNORE_START {
+            if saw_start {
+                anyhow::bail!("malformed .gitignore: duplicate rtango managed block start marker");
+            }
+            saw_start = true;
+            in_managed_block = true;
+            continue;
+        }
+        if line == GITIGNORE_END {
+            if !in_managed_block {
+                anyhow::bail!("malformed .gitignore: rtango managed block end marker without start marker");
+            }
+            saw_end = true;
+            in_managed_block = false;
+            continue;
+        }
+        if !in_managed_block {
+            preserved.push(line);
+        }
+    }
+
+    if in_managed_block || saw_start != saw_end {
+        anyhow::bail!("malformed .gitignore: unterminated rtango managed block");
+    }
+
+    let mut out = preserved.join("\n").trim_end().to_string();
+    if !entries.is_empty() {
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        out.push_str(GITIGNORE_START);
+        out.push('\n');
+        out.push_str(&entries.join("\n"));
+        out.push('\n');
+        out.push_str(GITIGNORE_END);
+    }
+
+    if out.is_empty() {
+        Ok(String::new())
+    } else {
+        out.push('\n');
+        Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_gitignore;
+
+    #[test]
+    fn appends_managed_block() {
+        let content = render_gitignore("target/\n", &[".pi/skills/foo/".into()]).unwrap();
+        assert_eq!(
+            content,
+            "target/\n\n# >>> rtango managed targets >>>\n.pi/skills/foo/\n# <<< rtango managed targets <<<\n"
+        );
+    }
+
+    #[test]
+    fn replaces_existing_managed_block() {
+        let existing = "target/\n\n# >>> rtango managed targets >>>\n.old/\n# <<< rtango managed targets <<<\n";
+        let content = render_gitignore(existing, &[".pi/skills/foo/".into()]).unwrap();
+        assert_eq!(
+            content,
+            "target/\n\n# >>> rtango managed targets >>>\n.pi/skills/foo/\n# <<< rtango managed targets <<<\n"
+        );
+    }
+
+    #[test]
+    fn removes_managed_block_when_no_entries_remain() {
+        let existing = "target/\n\n# >>> rtango managed targets >>>\n.old/\n# <<< rtango managed targets <<<\n";
+        let content = render_gitignore(existing, &[]).unwrap();
+        assert_eq!(content, "target/\n");
+    }
+
+    #[test]
+    fn replaces_existing_managed_block_in_crlf_file() {
+        let existing = "target/\r\n\r\n# >>> rtango managed targets >>>\r\n.old/\r\n# <<< rtango managed targets <<<\r\n";
+        let content = render_gitignore(existing, &[".pi/skills/foo/".into()]).unwrap();
+        assert_eq!(
+            content,
+            "target/\n\n# >>> rtango managed targets >>>\n.pi/skills/foo/\n# <<< rtango managed targets <<<\n"
+        );
+        assert_eq!(content.matches("# >>> rtango managed targets >>>").count(), 1);
+    }
 }
