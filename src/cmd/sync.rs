@@ -2,8 +2,8 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 use crate::engine::{
-    AmbiguousPath, DeploymentStatus, Plan, compute_plan, execute_plan, find_ambiguities,
-    managed_gitignore_entries,
+    AmbiguousPath, DeploymentStatus, Plan, compute_plan_with_fetch_failures, execute_plan,
+    find_ambiguities_with_fetch_failures, managed_gitignore_entries,
 };
 use crate::spec::Ownership;
 use crate::spec::io::{
@@ -59,8 +59,27 @@ pub fn exec(
     rule: Option<String>,
     adopt: bool,
 ) -> anyhow::Result<()> {
+    exec_with_options(root, check, force, rule, adopt, false)
+}
+
+pub fn exec_with_options(
+    root: &Path,
+    check: bool,
+    force: bool,
+    rule: Option<String>,
+    adopt: bool,
+    ignore_fetch_failures: bool,
+) -> anyhow::Result<()> {
     let mut prompter = StdioPrompter;
-    exec_with_prompter(root, check, force, rule, adopt, &mut prompter)
+    exec_with_prompter_and_options(
+        root,
+        check,
+        force,
+        rule,
+        adopt,
+        &mut prompter,
+        ignore_fetch_failures,
+    )
 }
 
 pub fn exec_with_prompter(
@@ -71,18 +90,36 @@ pub fn exec_with_prompter(
     adopt: bool,
     prompter: &mut dyn Prompter,
 ) -> anyhow::Result<()> {
+    exec_with_prompter_and_options(root, check, force, rule, adopt, prompter, false)
+}
+
+pub fn exec_with_prompter_and_options(
+    root: &Path,
+    check: bool,
+    force: bool,
+    rule: Option<String>,
+    adopt: bool,
+    prompter: &mut dyn Prompter,
+    ignore_fetch_failures: bool,
+) -> anyhow::Result<()> {
     let spec = load_spec(root)?;
     let mut lock = load_lock_or_empty(root)?;
 
     // Resolve any set-vs-set ambiguities up front so compute_plan can proceed
     // without bailing. Each answer is persisted to .rtango/lock.yaml so future
     // syncs apply the same decision.
+    let mut printed_skipped_fetches = false;
     loop {
-        let ambiguities = find_ambiguities(root, &spec, &lock)?;
-        if ambiguities.is_empty() {
+        let report =
+            find_ambiguities_with_fetch_failures(root, &spec, &lock, ignore_fetch_failures)?;
+        if !printed_skipped_fetches {
+            super::print_skipped_github_fetches(&report.skipped_fetches);
+            printed_skipped_fetches = true;
+        }
+        if report.ambiguities.is_empty() {
             break;
         }
-        for a in &ambiguities {
+        for a in &report.ambiguities {
             let choice = prompter.choose_owner(a)?;
             let Some(rule_id) = choice else {
                 anyhow::bail!(
@@ -109,11 +146,22 @@ pub fn exec_with_prompter(
         save_lock(root, &lock)?;
     }
 
-    let plan = compute_plan(root, &spec, &lock, force || adopt, true)?;
-    let gitignore = if spec.defaults.gitignore_targets {
+    let report = compute_plan_with_fetch_failures(
+        root,
+        &spec,
+        &lock,
+        force || adopt,
+        true,
+        ignore_fetch_failures,
+    )?;
+    if !printed_skipped_fetches {
+        super::print_skipped_github_fetches(&report.skipped_fetches);
+    }
+    let plan = report.plan;
+    let gitignore = if spec.defaults.gitignore_targets && rule.is_none() {
         Some(gitignore_update(
             root,
-            &managed_gitignore_entries(&plan, rule.as_deref()),
+            &managed_gitignore_entries(&plan, None),
         )?)
     } else {
         None

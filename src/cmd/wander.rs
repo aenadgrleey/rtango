@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::bail;
 
 use crate::agent::{self, SourceKind};
-use crate::engine::{DeploymentStatus, compute_plan, execute_plan};
+use crate::engine::{DeploymentStatus, compute_plan_with_fetch_failures, execute_plan};
 use crate::error::RtangoError;
 use crate::spec::{AgentName, Defaults, Lock, Rule, RuleKind, Source, Spec};
 
@@ -19,6 +19,14 @@ use crate::spec::{AgentName, Defaults, Lock, Rule, RuleKind, Source, Spec};
 /// `force` is always on — without a lock there's no prior state to reason
 /// about, so pre-existing target files are overwritten.
 pub fn exec(root: &Path, targets: Vec<String>) -> anyhow::Result<()> {
+    exec_with_options(root, targets, false)
+}
+
+pub fn exec_with_options(
+    root: &Path,
+    targets: Vec<String>,
+    ignore_fetch_failures: bool,
+) -> anyhow::Result<()> {
     let target_agents: Vec<AgentName> = targets.into_iter().map(AgentName::new).collect();
     let target_set: HashSet<&AgentName> = target_agents.iter().collect();
 
@@ -68,7 +76,10 @@ pub fn exec(root: &Path, targets: Vec<String>) -> anyhow::Result<()> {
         deployments: vec![],
     };
 
-    let plan = compute_plan(root, &spec, &lock, true, true)?;
+    let report =
+        compute_plan_with_fetch_failures(root, &spec, &lock, true, true, ignore_fetch_failures)?;
+    super::print_skipped_github_fetches(&report.skipped_fetches);
+    let plan = report.plan;
     let _new_lock = execute_plan(root, &plan, &lock, false)?;
 
     let mut creates = 0usize;

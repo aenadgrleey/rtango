@@ -48,13 +48,28 @@ rtango status
 rtango sync
 ```
 
+## GitHub auth and fetch failures
+
+For GitHub-backed rules, rtango first uses `RTANGO_GITHUB_TOKEN` or `GITHUB_TOKEN` if either is set.
+If those are absent, rtango also tries `gh auth token` from an existing GitHub CLI login.
+If a GitHub fetch hits auth/rate-limit issues during a command, rtango can lazily ask to run
+`gh auth login`, then retry immediately.
+
+If you want the rest of the spec to continue when a GitHub fetch fails, use:
+
+```sh
+rtango sync --ignore-fetch-failures
+rtango status --ignore-fetch-failures
+rtango wander --ignore-fetch-failures
+```
+
 ## Commands
 
 | Command  | Purpose |
 | -------- | ------- |
 | `init`   | Detect installed agents and bootstrap `.rtango/spec.yaml` + `.rtango/lock.yaml`. `--gitignore-targets` adds a managed `.gitignore` block for generated targets. |
-| `sync`   | Fetch sources, render per-agent outputs, write files, update the lock. `--check` (CI dry-run), `--adopt` (absorb existing files on first sync), `--force` (override `on_target_modified: fail`), `--rule <id>` (single rule). When `defaults.gitignore_targets: true`, sync also maintains a managed `.gitignore` block. |
-| `status` | Preview the sync plan without writing. `--verbose` shows up-to-date items too. |
+| `sync`   | Fetch sources, render per-agent outputs, write files, update the lock. `--check` (CI dry-run), `--adopt` (absorb existing files on first sync), `--force` (override `on_target_modified: fail`), `--rule <id>` (single rule), `--ignore-fetch-failures` (skip GitHub rules whose fetch fails). When `defaults.gitignore_targets: true`, sync also maintains a managed `.gitignore` block. |
+| `status` | Preview the sync plan without writing. `--verbose` shows up-to-date items too. `--ignore-fetch-failures` skips GitHub rules whose fetch fails. |
 | `own`    | Record or clear a manual ownership decision when multiple rules target the same path. |
 | `add`    | Mechanically append a rule to the spec. Kinds: `--skill`, `--agent`, `--skill-set`, `--agent-set`, `--system`, `--collection-kind`/`--col`. |
 
@@ -64,7 +79,7 @@ rtango sync
 - **Kinds** — `skill`, `skill-set`, `agent`, `agent-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md`), `collection` (import rules from another repo's `.rtango/spec.yaml`).
 - **Rendering** — for each agent in `spec.agents`, rtango rewrites frontmatter and permission tokens into that agent's native schema and writes to its canonical path. The `schema_agent`'s own target is auto-skipped when source and target paths collide.
 - **Lock** — `.rtango/lock.yaml` records what was written, content hashes, and ownership decisions. Changes to target files detected outside rtango are caught by the `on_target_modified` policy (`fail` / `overwrite` / `skip`).
-- **Managed `.gitignore`** — optionally keep user-managed projected targets in a dedicated rtango block. Skill projections are ignored precisely as leaf directories (for example `.pi/skills/reviewer/`), while agent/system projections are ignored as exact files; broad roots like `.pi/` are never ignored.
+- **Managed `.gitignore`** — optionally keep projected targets in a dedicated rtango block. Skill projections are ignored precisely as leaf directories (for example `.pi/skills/reviewer/`), while agent/system projections are ignored as exact files; broad roots like `.pi/` are never ignored.
 
 ## Repository signals for agents
 

@@ -53,6 +53,25 @@ pub struct Plan {
     pub owners: Vec<Ownership>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkippedGithubFetch {
+    pub rule_id: String,
+    pub source: String,
+    pub message: String,
+}
+
+#[derive(Debug)]
+pub struct PlanReport {
+    pub plan: Plan,
+    pub skipped_fetches: Vec<SkippedGithubFetch>,
+}
+
+#[derive(Debug)]
+pub struct AmbiguityReport {
+    pub ambiguities: Vec<AmbiguousPath>,
+    pub skipped_fetches: Vec<SkippedGithubFetch>,
+}
+
 impl Plan {
     pub fn is_clean(&self) -> bool {
         self.items
@@ -138,8 +157,7 @@ pub fn effective_policy(
 ///   agent roots like `.pi/` or `.pi/skills/`.
 /// - Agents and system files are ignored as individual files.
 /// - Orphans are excluded because the current spec no longer manages them.
-/// - Built-ins are excluded: the managed block reflects only user rule
-///   projections.
+/// - Built-ins are included so their projected targets are ignored too.
 /// - When `rule_filter` is set, only projections owned by that rule are
 ///   included. This keeps `status --rule ...` and `sync --rule ...` scoped to
 ///   the selected rule.
@@ -147,8 +165,7 @@ pub fn managed_gitignore_entries(plan: &Plan, rule_filter: Option<&str>) -> Vec<
     let mut entries = BTreeSet::new();
 
     for item in &plan.items {
-        if item.status == DeploymentStatus::Orphan || item.rule_id == builtin::BUILTIN_RTANGO_RULE_ID
-        {
+        if item.status == DeploymentStatus::Orphan {
             continue;
         }
         if rule_filter.is_some_and(|rule_id| item.rule_id != rule_id) {

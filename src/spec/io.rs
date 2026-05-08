@@ -165,7 +165,9 @@ fn render_gitignore(existing: &str, entries: &[String]) -> anyhow::Result<String
         }
         if line == GITIGNORE_END {
             if !in_managed_block {
-                anyhow::bail!("malformed .gitignore: rtango managed block end marker without start marker");
+                anyhow::bail!(
+                    "malformed .gitignore: rtango managed block end marker without start marker"
+                );
             }
             saw_end = true;
             in_managed_block = false;
@@ -238,6 +240,9 @@ mod tests {
             content,
             "target/\n\n# >>> rtango managed targets >>>\n.pi/skills/foo/\n# <<< rtango managed targets <<<\n"
         );
-        assert_eq!(content.matches("# >>> rtango managed targets >>>").count(), 1);
+        assert_eq!(
+            content.matches("# >>> rtango managed targets >>>").count(),
+            1
+        );
     }
 }

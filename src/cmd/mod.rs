@@ -52,6 +52,10 @@ pub enum Command {
         /// Adopt existing target files on first sync
         #[arg(short, long)]
         adopt: bool,
+
+        /// Skip GitHub rules whose fetch fails and continue with the rest
+        #[arg(long)]
+        ignore_fetch_failures: bool,
     },
 
     /// Show sync plan without writing anything
@@ -63,6 +67,10 @@ pub enum Command {
         /// Show up-to-date items too
         #[arg(short, long)]
         verbose: bool,
+
+        /// Skip GitHub rules whose fetch fails and continue with the rest
+        #[arg(long)]
+        ignore_fetch_failures: bool,
     },
 
     /// Run init + sync in-memory: render target files without creating `.rtango/`
@@ -70,6 +78,10 @@ pub enum Command {
         /// Additional target agent to render for (repeatable)
         #[arg(short = 't', long = "target", value_name = "AGENT")]
         targets: Vec<String>,
+
+        /// Skip GitHub rules whose fetch fails and continue with the rest
+        #[arg(long)]
+        ignore_fetch_failures: bool,
     },
 
     /// Record or clear a manual ownership decision for a contested path
@@ -221,9 +233,17 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             force,
             rule,
             adopt,
-        } => sync::exec(&root, check, force, rule, adopt),
-        Command::Status { rule, verbose } => status::exec(&root, rule, verbose),
-        Command::Wander { targets } => wander::exec(&root, targets),
+            ignore_fetch_failures,
+        } => sync::exec_with_options(&root, check, force, rule, adopt, ignore_fetch_failures),
+        Command::Status {
+            rule,
+            verbose,
+            ignore_fetch_failures,
+        } => status::exec_with_options(&root, rule, verbose, ignore_fetch_failures),
+        Command::Wander {
+            targets,
+            ignore_fetch_failures,
+        } => wander::exec_with_options(&root, targets, ignore_fetch_failures),
         Command::Own {
             path,
             rule_id,
@@ -265,5 +285,14 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
                 exclude,
             },
         ),
+    }
+}
+
+pub(crate) fn print_skipped_github_fetches(skipped: &[crate::engine::SkippedGithubFetch]) {
+    for skipped_fetch in skipped {
+        eprintln!(
+            "warning: skipped GitHub rule '{}' ({})\n  {}",
+            skipped_fetch.rule_id, skipped_fetch.source, skipped_fetch.message
+        );
     }
 }

@@ -1114,7 +1114,7 @@ fn builtin_skips_source_dirs_of_user_rules() {
 }
 
 #[test]
-fn managed_gitignore_entries_exclude_builtins() {
+fn managed_gitignore_entries_include_builtins() {
     let tmp = TempDir::new().unwrap();
     let root = tmp.path();
     setup_copilot_skill(root, "my-skill", "body\n");
@@ -1129,5 +1129,5 @@ fn managed_gitignore_entries_exclude_builtins() {
     let entries = managed_gitignore_entries(&plan, None);
 
     assert!(entries.contains(&".claude/skills/my-skill/".to_string()));
-    assert!(!entries.iter().any(|e| e.contains("rtango")));
+    assert!(entries.contains(&".claude/skills/rtango/".to_string()));
 }

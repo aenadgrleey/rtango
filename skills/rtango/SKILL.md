@@ -16,7 +16,7 @@ rtango is a package manager for AI-agent configuration. You author a skill or in
 - **spec.yaml** (`.rtango/spec.yaml`) — declares agents, rules, and defaults. This is the source of truth for what gets synced.
 - **lock.yaml** (`.rtango/lock.yaml`) — records what was last written, content hashes, and ownership decisions. Never hand-edit; regenerate with `rtango sync`.
 - **Rule** — a `{id, source, schema_agent, kind}` declaration. Source can be a local path or a GitHub ref (`github: owner/repo@ref:path`).
-- **Kind** — one of: `skill`, `skill-set`, `agent`, `agent-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md`), `collection` (import all rules from another repo's `.rtango/spec.yaml`).
+- **Kind** — one of: `skill`, `skill-set`, `agent`, `agent-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md`).
 - **schema_agent** — the agent whose native format the source file is written in. rtango reads frontmatter and permissions using this agent's parser.
 
 ## Commands
@@ -26,10 +26,9 @@ rtango is a package manager for AI-agent configuration. You author a skill or in
 Scan the project, detect installed agents, and bootstrap `.rtango/spec.yaml` + `.rtango/lock.yaml`.
 
 ```sh
-rtango init              # detect agents and create spec
-rtango init --force      # overwrite existing spec
+rtango init           # detect agents and create spec
+rtango init --force   # overwrite existing spec
 rtango init --no-detect  # create empty skeleton without auto-detection
-rtango init --gitignore-targets  # also manage a .gitignore block for projected targets
 ```
 
 Run this once when setting up rtango in a new project.
@@ -55,19 +54,7 @@ rtango add my-agents --local .github/agents/ --agent-set
 rtango add instructions --local AGENTS.md --system
 
 # Add from GitHub
-rtango add upstream-skill --repo owner/repo@abc123:path/to/skill --skill
-
-# Add a collection: import all rules from a local sibling repo
-rtango add shared-tools --local ../shared-tools --col
-
-# Add a collection: import from a GitHub repo (pin to a commit hash)
-rtango add shared-tools --repo owner/shared-tools@abc123 --col
-
-# Collection with include filter (only import named rules)
-rtango add shared-tools --repo owner/shared-tools@abc123 --col --include my-skill --include other-skill
-
-# Collection with schema override (force a specific parser for all imported rules)
-rtango add shared-tools --local ../shared-tools --col --schema copilot
+rtango add upstream-skill --repo "github: owner/repo@abc123:path/to/skill" --skill
 
 # Specify schema agent when spec has multiple agents
 rtango add my-skill --local .github/skills/my-skill --skill --schema copilot
@@ -95,8 +82,6 @@ The output labels each target file:
 - **orphan** — target exists in the lock but its rule/source was removed from the spec.
 - **up-to-date** — nothing to do (shown only with `--verbose`).
 
-If `defaults.gitignore_targets: true`, `status` also reports `.gitignore` when the managed rtango block would change.
-
 ### `rtango sync`
 
 Execute the sync plan: fetch remote sources, render per-agent outputs, write files, and update the lock.
@@ -114,8 +99,6 @@ rtango sync --rule my-skill  # only sync one rule
 **`--adopt`** is useful when you already have target files that match what rtango would generate. Instead of treating them as conflicts, adopt records them in the lock as if they had been synced.
 
 **`--force`** overwrites files even when the `on_target_modified` policy is `fail`. Use with care — it discards any local edits made since the last sync.
-
-If `defaults.gitignore_targets: true`, `sync` also maintains a dedicated managed block in `.gitignore` for projected targets from user rules. Skill projections are ignored as concrete skill directories (for example `.pi/skills/reviewer/`), while agent and system projections are ignored as exact files. Broad parents like `.pi/` or `.pi/skills/` are never ignored.
 
 ### `rtango own`
 
@@ -161,33 +144,12 @@ rtango sync
 
 ```sh
 # Add a skill from a specific commit
-rtango add code-review --repo addyosmani/agent-skills@abc123:skills/code-review --skill
+rtango add code-review --repo "github: addyosmani/agent-skills@abc123:skills/code-review" --skill
 
 # Preview and sync
 rtango status
 rtango sync
 ```
-
-### Importing a Remote Collection
-
-A **collection** points at another repo's `.rtango/spec.yaml` and imports its rules wholesale. Use the same `--local` or `--repo` source flags, plus `--col`.
-
-```sh
-# Import from a local sibling repo (monorepo, checked-out dependency)
-rtango add team-skills --local ../team-skills --col
-
-# Import from GitHub, pinned to a commit
-rtango add team-skills --repo org/team-skills@abc123 --col
-
-# Only import specific rules from the collection
-rtango add team-skills --repo org/team-skills@abc123 --col --include code-review --include linting
-
-# Preview and sync
-rtango status
-rtango sync
-```
-
-Imported rules are namespaced in the lock as `<collection-id>/<rule-id>` (e.g. `team-skills/code-review`). When two collections import a skill with the same name, rtango detects the path conflict and prompts you to pick an owner — or you can pre-resolve with `rtango own`.
 
 ### CI Gate
 
@@ -252,7 +214,6 @@ agents:
 
 defaults:
   on_target_modified: fail  # fail | overwrite | skip
-  gitignore_targets: true   # maintain a managed .gitignore block for projected targets
 
 rules:
   # Local skill-set
@@ -282,41 +243,14 @@ rules:
     source: AGENTS.md
     schema_agent: claude-code
     kind: system
-
-  # Local collection: import all rules from a sibling repo
-  - id: team-skills
-    source: ../team-skills
-    schema_agent: claude-code
-    kind: collection
-
-  # Remote collection from GitHub (pinned commit)
-  - id: team-skills
-    source:
-      github: org/team-skills
-      ref: abc123def456
-    schema_agent: claude-code
-    kind: collection
-    include:
-      - code-review   # only import these rule ids
-      - linting
 ```
 
 ## Tips
 
 - **Always run `rtango status` before `rtango sync`** to preview changes.
 - **Pin GitHub sources to commit hashes** (not branches) for reproducible builds.
+- **For remote-sourced skills, let rtango generate the precise `.gitignore` entries** for the projected targets; ignore leaf skill directories (for example, `.pi/skills/<skill>/`), not the whole skills tree.
 - **The `schema_agent`'s own target is auto-skipped** when source and target paths are the same — a rule targeting copilot with `schema_agent: copilot` is a no-op for copilot but still renders for other agents.
 - **Never hand-edit `.rtango/lock.yaml`** — regenerate it with `rtango sync`.
 - **Use `--rule` to sync a single rule** when iterating on one skill without touching others.
 - **System-kind rules** (like `AGENTS.md`) have no frontmatter — the source content is written verbatim.
-- **Collection rules** use the same `--local`/`--repo` source as any other rule; `--col`/`--collection-kind` is the kind flag. The source must be a directory containing `.rtango/spec.yaml`.
-- **Pin collection GitHub sources to commit hashes** for reproducible builds.
-- **Collection conflicts** work exactly like set-vs-set conflicts — when two rules claim the same target path, rtango prompts you during `sync` or you can pre-resolve with `rtango own`.
-- **If a repo uses rtango, leave clear signals for future agents**: commit `.rtango/spec.yaml`, usually commit `.rtango/lock.yaml`, and add a short note in `AGENTS.md`, `CLAUDE.md`, or `README.md` telling agents to use `rtango status` and `rtango sync` after changing shared agent files.
-- **Prefer explicit agent-facing wording** such as:
-  ```md
-  This repo uses rtango to manage agent skills/instructions.
-  After changing shared agent files or `.rtango/spec.yaml`, run:
-  - `rtango status`
-  - `rtango sync`
-  ```

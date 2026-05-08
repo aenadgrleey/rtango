@@ -11,3 +11,7 @@
 /demo/.github/skills/git-helper/
 /demo/.github/skills/code-review-and-quality/
 /demo/.github/skills/rtango/
+
+# Pi internal state
+/.pi/plans/
+/.pi/*.local.json

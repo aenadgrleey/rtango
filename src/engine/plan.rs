@@ -3,11 +3,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::agent::{self, frontmatter::join_frontmatter};
-use crate::spec::{AgentName, Deployment, Lock, OnTargetModified, Ownership, RuleKind, Spec};
+use crate::spec::{
+    AgentName, Deployment, Lock, OnTargetModified, Ownership, Rule, RuleKind, Source, Spec,
+};
 
+use super::fetch::{GithubFetchError, describe_github_source};
 use super::{
-    DeploymentStatus, ExpandedItem, ExpandedKind, Plan, PlannedDeployment, RenderedTarget, builtin,
-    effective_policy, expand_rule, hash_content,
+    AmbiguityReport, DeploymentStatus, ExpandedItem, ExpandedKind, Plan, PlanReport,
+    PlannedDeployment, RenderedTarget, SkippedGithubFetch, builtin, effective_policy, expand_rule,
+    hash_content,
 };
 
 /// Compute the target path for a rendered item based on the target agent.
@@ -116,6 +120,16 @@ fn find_reparent_candidate<'a>(
         .find(|d| d.agent == *agent && d.content == target_path)
 }
 
+struct ExpandedRule {
+    rule_index: usize,
+    items: Vec<ExpandedItem>,
+}
+
+struct ExpansionOutcome {
+    expanded_rules: Vec<ExpandedRule>,
+    skipped_fetches: Vec<SkippedGithubFetch>,
+}
+
 /// Compute the full sync plan.
 ///
 /// When `inject_builtins` is true, built-in skills (like the rtango usage
@@ -128,18 +142,43 @@ pub fn compute_plan(
     force: bool,
     inject_builtins: bool,
 ) -> anyhow::Result<Plan> {
+    Ok(compute_plan_with_fetch_failures(root, spec, lock, force, inject_builtins, false)?.plan)
+}
+
+pub fn compute_plan_with_fetch_failures(
+    root: &Path,
+    spec: &Spec,
+    lock: &Lock,
+    force: bool,
+    inject_builtins: bool,
+    ignore_fetch_failures: bool,
+) -> anyhow::Result<PlanReport> {
+    let expansion = expand_rules(root, spec, ignore_fetch_failures)?;
+    let plan = compute_plan_from_expanded_rules(
+        root,
+        spec,
+        lock,
+        force,
+        inject_builtins,
+        &expansion.expanded_rules,
+    )?;
+    Ok(PlanReport {
+        plan,
+        skipped_fetches: expansion.skipped_fetches,
+    })
+}
+
+fn compute_plan_from_expanded_rules(
+    root: &Path,
+    spec: &Spec,
+    lock: &Lock,
+    force: bool,
+    inject_builtins: bool,
+    expanded_rules: &[ExpandedRule],
+) -> anyhow::Result<Plan> {
     let default_policy = spec.defaults.on_target_modified;
     let mut items = Vec::new();
-
-    // Phase 1: expand every rule once and collect, for each absolute path that
-    // would be touched (source file of an expanded item, or target path of a
-    // rendered item), the set of rules that claim it.
-    let expansions: Vec<Vec<ExpandedItem>> = spec
-        .rules
-        .iter()
-        .map(|r| expand_rule(root, r))
-        .collect::<anyhow::Result<_>>()?;
-    let candidates = collect_candidates(root, spec)?;
+    let candidates = collect_candidates_from_expanded_rules(root, spec, expanded_rules)?;
 
     // Phase 2: resolve ownership for every touched path.
     let owners = resolve_owners(spec, &candidates, lock)?;
@@ -164,16 +203,16 @@ pub fn compute_plan(
     // by a different rule and still live).
     let mut produced: HashSet<PathBuf> = HashSet::new();
 
-    for (rule, expanded) in spec.rules.iter().zip(expansions.iter()) {
+    for expanded_rule in expanded_rules {
+        let rule = &spec.rules[expanded_rule.rule_index];
         let policy = effective_policy(rule.on_target_modified, default_policy);
 
-        for exp_item in expanded {
+        for exp_item in &expanded_rule.items {
             let source_file = match &exp_item.kind {
                 ExpandedKind::Skill(s) => &s.file,
                 ExpandedKind::Agent(a) => &a.file,
                 ExpandedKind::System(s) => &s.file,
             };
-            // Only process items whose source path this rule owns.
             if owners.get(source_file).map(String::as_str) != Some(rule.id.as_str()) {
                 continue;
             }
@@ -182,11 +221,9 @@ pub fn compute_plan(
                 let rendered = render_for_agent(root, exp_item, &rule.schema_agent, target_agent)?;
                 let abs_target = root.join(&rendered.target_path);
 
-                // Skip self-writes: writer round-tripping its own source file.
                 if source_file == &abs_target {
                     continue;
                 }
-                // Only render targets this rule owns.
                 if owners.get(&abs_target).map(String::as_str) != Some(rule.id.as_str()) {
                     continue;
                 }
@@ -201,17 +238,12 @@ pub fn compute_plan(
                 let disk_content = fs::read_to_string(&abs_target).ok();
                 let disk_hash = disk_content.as_deref().map(hash_content);
 
-                // Normal lookup: lock entry for *this* rule.
                 let direct = find_lock_entry(
                     lock,
                     &rendered.rule_id,
                     &rendered.agent,
                     &rendered.target_path,
                 );
-                // Reparent adoption: if no direct entry but another rule has a
-                // lock entry for the same (agent, target_path) and the on-disk
-                // file still matches its content_hash, forward that entry so
-                // the target is adopted rather than flagged as a conflict.
                 let adopted: Option<Deployment> = match (direct, disk_hash.as_deref()) {
                     (None, Some(dh)) => {
                         find_reparent_candidate(lock, &rendered.agent, &rendered.target_path)
@@ -251,11 +283,6 @@ pub fn compute_plan(
         }
     }
 
-    // Orphan detection. A lock entry is truly orphaned only if the current
-    // spec no longer produces it AND no other rule now owns the path. The
-    // second check keeps us from deleting a file that was simply reparented
-    // to a different rule (e.g. a set rule's old entry for a file that a
-    // single-file rule now owns).
     for dep in &lock.deployments {
         let key = (
             dep.rule_id.clone(),
@@ -280,19 +307,12 @@ pub fn compute_plan(
         });
     }
 
-    // Built-in skills: injected automatically, not tracked in the lock.
-    //
-    // Skip a builtin target if:
-    //   1. A user rule already produces the same target path, OR
-    //   2. The target path falls under a user rule's source directory.
-    //      (Otherwise the user's skill-set rule would scoop up the builtin
-    //      file on the next sync, causing a lock-miss conflict.)
     if inject_builtins {
         let user_source_dirs: Vec<PathBuf> = spec
             .rules
             .iter()
             .filter_map(|r| match &r.source {
-                crate::spec::Source::Local(p) => Some(root.join(p)),
+                Source::Local(p) => Some(root.join(p)),
                 _ => None,
             })
             .filter(|p| p.is_dir())
@@ -303,7 +323,6 @@ pub fn compute_plan(
             if produced.contains(&abs_target) {
                 continue;
             }
-            // Don't write into directories that user skill-set/agent-set rules scan.
             if user_source_dirs
                 .iter()
                 .any(|dir| abs_target.starts_with(dir))
@@ -329,11 +348,63 @@ pub fn compute_plan(
                 status,
             });
         }
-    } // end if inject_builtins
+    }
 
     Ok(Plan {
         items,
         owners: contested_owners,
+    })
+}
+
+fn expand_rules(
+    root: &Path,
+    spec: &Spec,
+    ignore_fetch_failures: bool,
+) -> anyhow::Result<ExpansionOutcome> {
+    let mut expanded_rules = Vec::new();
+    let mut skipped_fetches = Vec::new();
+
+    for (rule_index, rule) in spec.rules.iter().enumerate() {
+        match expand_rule(root, rule) {
+            Ok(items) => expanded_rules.push(ExpandedRule { rule_index, items }),
+            Err(err) => {
+                if let Some(skipped) = skipped_github_fetch(rule, &err, ignore_fetch_failures) {
+                    skipped_fetches.push(skipped);
+                    continue;
+                }
+                return Err(err);
+            }
+        }
+    }
+
+    Ok(ExpansionOutcome {
+        expanded_rules,
+        skipped_fetches,
+    })
+}
+
+fn skipped_github_fetch(
+    rule: &Rule,
+    err: &anyhow::Error,
+    ignore_fetch_failures: bool,
+) -> Option<SkippedGithubFetch> {
+    if !ignore_fetch_failures {
+        return None;
+    }
+    let fetch_err = err.downcast_ref::<GithubFetchError>()?;
+    if !fetch_err.is_ignorable_fetch_failure() {
+        return None;
+    }
+
+    let source = match &rule.source {
+        Source::Github(g) => describe_github_source(g),
+        Source::Local(path) => path.display().to_string(),
+    };
+
+    Some(SkippedGithubFetch {
+        rule_id: rule.id.clone(),
+        source,
+        message: fetch_err.to_string(),
     })
 }
 
@@ -415,7 +486,17 @@ pub fn find_ambiguities(
     spec: &Spec,
     lock: &Lock,
 ) -> anyhow::Result<Vec<AmbiguousPath>> {
-    let candidates = collect_candidates(root, spec)?;
+    Ok(find_ambiguities_with_fetch_failures(root, spec, lock, false)?.ambiguities)
+}
+
+pub fn find_ambiguities_with_fetch_failures(
+    root: &Path,
+    spec: &Spec,
+    lock: &Lock,
+    ignore_fetch_failures: bool,
+) -> anyhow::Result<AmbiguityReport> {
+    let expansion = expand_rules(root, spec, ignore_fetch_failures)?;
+    let candidates = collect_candidates_from_expanded_rules(root, spec, &expansion.expanded_rules)?;
     let rule_kinds: HashMap<&str, &RuleKind> = spec
         .rules
         .iter()
@@ -434,22 +515,21 @@ pub fn find_ambiguities(
         }
     }
     out.sort_by(|a, b| a.path.cmp(&b.path));
-    Ok(out)
+    Ok(AmbiguityReport {
+        ambiguities: out,
+        skipped_fetches: expansion.skipped_fetches,
+    })
 }
 
-fn collect_candidates(
+fn collect_candidates_from_expanded_rules(
     root: &Path,
     spec: &Spec,
+    expanded_rules: &[ExpandedRule],
 ) -> anyhow::Result<HashMap<PathBuf, HashSet<String>>> {
-    let expansions: Vec<Vec<ExpandedItem>> = spec
-        .rules
-        .iter()
-        .map(|r| expand_rule(root, r))
-        .collect::<anyhow::Result<_>>()?;
-
     let mut candidates: HashMap<PathBuf, HashSet<String>> = HashMap::new();
-    for (rule, expanded) in spec.rules.iter().zip(expansions.iter()) {
-        for item in expanded {
+    for expanded_rule in expanded_rules {
+        let rule = &spec.rules[expanded_rule.rule_index];
+        for item in &expanded_rule.items {
             let source_file = match &item.kind {
                 ExpandedKind::Skill(s) => s.file.clone(),
                 ExpandedKind::Agent(a) => a.file.clone(),
@@ -573,5 +653,80 @@ fn apply_policy(policy: OnTargetModified, force: bool, reason: &str) -> Deployme
         },
         OnTargetModified::Overwrite => DeploymentStatus::Update,
         OnTargetModified::Skip => DeploymentStatus::UpToDate,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use tempfile::TempDir;
+
+    fn setup_copilot_skill(root: &Path, name: &str, body: &str) {
+        let dir = root.join(format!(".github/skills/{name}"));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("SKILL.md"), body).unwrap();
+    }
+
+    fn empty_lock() -> Lock {
+        Lock {
+            version: 1,
+            tracked_agents: vec![],
+            owners: vec![],
+            deployments: vec![],
+        }
+    }
+
+    #[test]
+    fn skipped_rules_do_not_contribute_to_plan_items() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        setup_copilot_skill(root, "local", "Local body");
+
+        let local_rule = Rule {
+            id: "local".into(),
+            source: Source::Local(PathBuf::from(".github/skills")),
+            schema_agent: AgentName::new("copilot"),
+            on_target_modified: None,
+            kind: RuleKind::skill_set(),
+        };
+        let skipped_rule = Rule {
+            id: "remote".into(),
+            source: Source::Github(crate::spec::GithubSource {
+                github: "owner/repo".into(),
+                r#ref: "main".into(),
+                path: "skills".into(),
+            }),
+            schema_agent: AgentName::new("copilot"),
+            on_target_modified: None,
+            kind: RuleKind::skill_set(),
+        };
+        let local_items = expand_rule(root, &local_rule).unwrap();
+        let spec = Spec {
+            version: 1,
+            agents: vec![AgentName::new("claude-code")],
+            defaults: crate::spec::Defaults::default(),
+            rules: vec![local_rule, skipped_rule],
+        };
+        let expanded_rules = vec![ExpandedRule {
+            rule_index: 0,
+            items: local_items,
+        }];
+
+        let plan = compute_plan_from_expanded_rules(
+            root,
+            &spec,
+            &empty_lock(),
+            false,
+            false,
+            &expanded_rules,
+        )
+        .unwrap();
+
+        assert_eq!(plan.items.len(), 1);
+        assert_eq!(plan.items[0].rule_id, "local");
+        assert_eq!(plan.items[0].status, DeploymentStatus::Create);
     }
 }

@@ -368,7 +368,11 @@ fn sync_updates_gitignore_precisely_when_enabled() {
             gitignore_targets: true,
             ..Defaults::default()
         },
-        vec![single_skill_rule("deploy", ".github/skills/deploy", "copilot")],
+        vec![single_skill_rule(
+            "deploy",
+            ".github/skills/deploy",
+            "copilot",
+        )],
     );
     write_spec(root, &spec);
 
@@ -377,10 +381,11 @@ fn sync_updates_gitignore_precisely_when_enabled() {
     let gitignore = fs::read_to_string(root.join(".gitignore")).unwrap();
     assert!(gitignore.contains("# >>> rtango managed targets >>>"));
     assert!(gitignore.contains(".claude/skills/deploy/"));
+    assert!(gitignore.contains(".claude/skills/rtango/"));
+    assert!(gitignore.contains(".github/skills/rtango/"));
     assert!(!gitignore.contains(".claude/\n"));
     assert!(!gitignore.contains(".claude/skills/\n"));
     assert!(!gitignore.contains(".github/skills/deploy/"));
-    assert!(!gitignore.contains("/skills/rtango/"));
 }
 
 #[test]
@@ -396,7 +401,11 @@ fn check_mode_fails_when_managed_gitignore_is_out_of_date() {
             gitignore_targets: true,
             ..Defaults::default()
         },
-        vec![single_skill_rule("deploy", ".github/skills/deploy", "copilot")],
+        vec![single_skill_rule(
+            "deploy",
+            ".github/skills/deploy",
+            "copilot",
+        )],
     );
     write_spec(root, &spec);
 
@@ -420,7 +429,11 @@ fn rule_filtered_check_ignores_unrelated_gitignore_changes() {
             gitignore_targets: true,
             ..Defaults::default()
         },
-        vec![single_skill_rule("rule-alpha", ".github/skills/alpha", "copilot")],
+        vec![single_skill_rule(
+            "rule-alpha",
+            ".github/skills/alpha",
+            "copilot",
+        )],
     );
     write_spec(root, &initial_spec);
     rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
@@ -455,7 +468,11 @@ fn rule_filtered_sync_does_not_write_gitignore_entries_for_other_rules() {
             gitignore_targets: true,
             ..Defaults::default()
         },
-        vec![single_skill_rule("rule-alpha", ".github/skills/alpha", "copilot")],
+        vec![single_skill_rule(
+            "rule-alpha",
+            ".github/skills/alpha",
+            "copilot",
+        )],
     );
     write_spec(root, &initial_spec);
     rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
