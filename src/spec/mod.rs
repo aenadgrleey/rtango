@@ -1,6 +1,7 @@
 pub mod io;
 pub mod lock;
 pub mod source;
+#[allow(clippy::module_inception)]
 pub mod spec;
 
 pub use lock::*;

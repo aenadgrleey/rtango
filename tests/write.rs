@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
 
 use rtango::agent::frontmatter::{FrontMatter, FrontMatterMapper, split_frontmatter};
 use rtango::agent::permission::Permission;

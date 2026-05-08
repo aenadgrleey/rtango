@@ -4,9 +4,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use rtango::engine::{DeploymentStatus, compute_plan, execute_plan};
-use rtango::spec::{
-    AgentName, Defaults, Deployment, Lock, OnTargetModified, Rule, RuleKind, Source, Spec,
-};
+use rtango::spec::{AgentName, Defaults, Lock, Rule, RuleKind, Source, Spec};
 
 // ── Helpers ──────────────────────────────────────────────────────────
 

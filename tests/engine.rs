@@ -1,15 +1,13 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 
 use rtango::engine::{
-    DeploymentStatus, ExpandedKind, Plan, compute_plan, execute_plan, expand_rule, hash_content,
+    DeploymentStatus, ExpandedKind, compute_plan, execute_plan, expand_rule,
     managed_gitignore_entries, render_for_agent,
 };
-use rtango::spec::{
-    AgentName, Defaults, Deployment, Lock, OnTargetModified, Rule, RuleKind, Source, Spec,
-};
+use rtango::spec::{AgentName, Defaults, Lock, OnTargetModified, Rule, RuleKind, Source, Spec};
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -842,7 +840,7 @@ fn set_vs_set_respects_lock_owners_override() {
     let foo_items: Vec<_> = plan
         .items
         .iter()
-        .filter(|i| i.target_path == PathBuf::from(".claude/skills/foo/SKILL.md"))
+        .filter(|i| i.target_path.as_path() == Path::new(".claude/skills/foo/SKILL.md"))
         .collect();
     assert_eq!(foo_items.len(), 1);
     assert_eq!(foo_items[0].rule_id, "a");
@@ -941,7 +939,8 @@ fn reparented_target_adopts_existing_content_without_conflict() {
         .items
         .iter()
         .find(|i| {
-            i.rule_id == "set" && i.target_path == PathBuf::from(".claude/skills/foo/SKILL.md")
+            i.rule_id == "set"
+                && i.target_path.as_path() == Path::new(".claude/skills/foo/SKILL.md")
         })
         .expect("expected a set-rule deployment for foo");
     assert_eq!(
@@ -988,7 +987,8 @@ fn reparented_target_with_modified_source_is_updated() {
         .items
         .iter()
         .find(|i| {
-            i.rule_id == "set" && i.target_path == PathBuf::from(".claude/skills/foo/SKILL.md")
+            i.rule_id == "set"
+                && i.target_path.as_path() == Path::new(".claude/skills/foo/SKILL.md")
         })
         .unwrap();
     assert_eq!(set_item.status, DeploymentStatus::Update);
@@ -1108,7 +1108,7 @@ fn builtin_skips_source_dirs_of_user_rules() {
         );
     }
     assert!(
-        builtin_items.len() >= 1,
+        !builtin_items.is_empty(),
         "should write to at least one agent"
     );
 }

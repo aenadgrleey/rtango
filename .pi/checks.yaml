@@ -1,0 +1,12 @@
+checks:
+  - name: fmt
+    command: cargo fmt --check
+    description: Rust formatting
+
+  - name: clippy
+    command: cargo clippy --all-targets -- -D warnings
+    description: Rust lints
+
+  - name: test
+    command: cargo test
+    description: Unit and integration tests

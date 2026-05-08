@@ -43,10 +43,10 @@ pub fn parse_standard_skills(
                 None => FrontMatter::default(),
             };
             skills.push(Skill {
-                name: name,
+                name,
                 dir: path,
                 file: skill_file,
-                front_matter: front_matter,
+                front_matter,
                 body: body.to_string(),
             });
         }

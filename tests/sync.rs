@@ -3,11 +3,8 @@ use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 
-use rtango::engine::hash_content;
-use rtango::spec::io::{load_lock, save_lock};
-use rtango::spec::{
-    AgentName, Defaults, Deployment, Lock, OnTargetModified, Rule, RuleKind, Source, Spec,
-};
+use rtango::spec::io::load_lock;
+use rtango::spec::{AgentName, Defaults, Rule, RuleKind, Source, Spec};
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -53,15 +50,6 @@ fn single_skill_rule(id: &str, path: &str, schema: &str) -> Rule {
         schema_agent: AgentName::new(schema),
         on_target_modified: None,
         kind: RuleKind::skill(),
-    }
-}
-
-fn empty_lock() -> Lock {
-    Lock {
-        version: 1,
-        tracked_agents: vec![],
-        owners: vec![],
-        deployments: vec![],
     }
 }
 

@@ -1,0 +1,5 @@
+{
+  "packages": [
+    "git:git@github.com:aenadgrleey/personal-ai-tools.git"
+  ]
+}

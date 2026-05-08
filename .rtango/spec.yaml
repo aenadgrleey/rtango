@@ -1,10 +1,34 @@
 version: 1
 agents:
-- claude-code
+- pi
 defaults:
   on_target_modified: fail
+  gitignore_targets: true
 rules:
 - id: agents-md
   source: AGENTS.md
-  schema_agent: claude-code
+  schema_agent: pi
   kind: system
+- id: personal-ai-tools-baseline
+  source:
+    github: aenadgrleey/personal-ai-tools
+    ref: 141b939bab22136fef5cfc5a531eed3c03d6b5d3
+  schema_agent: plain
+  kind: collection
+  include:
+    - caveman
+    - write-a-skill
+    - karpathy-guidelines
+    - spec-driven-development
+    - tdd
+    - zoom-out
+- id: personal-ai-tools-github
+  source:
+    github: aenadgrleey/personal-ai-tools
+    ref: 141b939bab22136fef5cfc5a531eed3c03d6b5d3
+  schema_agent: plain
+  kind: collection
+  include:
+    - commit
+    - github-pr
+    - yeet

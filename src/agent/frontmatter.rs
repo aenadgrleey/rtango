@@ -62,24 +62,27 @@ pub fn parse_standard_frontmatter(
     mapper: &dyn FrontMatterMapper,
 ) -> anyhow::Result<FrontMatter> {
     let raw: BTreeMap<String, serde_yml::Value> = serde_yml::from_str(yaml)?;
-    let mut fm = FrontMatter::default();
-
-    fm.name = extract_string(&raw, "name");
-    fm.description = extract_string(&raw, "description");
-
-    if let Some(tools_str) = extract_string(&raw, "allowed-tools") {
-        fm.allowed_tools = tokenize_tools(&tools_str)
-            .into_iter()
-            .map(|t| mapper.parse_permission(&t))
-            .collect();
-    }
-
-    fm.extra = raw
+    let name = extract_string(&raw, "name");
+    let description = extract_string(&raw, "description");
+    let allowed_tools = extract_string(&raw, "allowed-tools")
+        .map(|tools_str| {
+            tokenize_tools(&tools_str)
+                .into_iter()
+                .map(|t| mapper.parse_permission(&t))
+                .collect()
+        })
+        .unwrap_or_default();
+    let extra = raw
         .into_iter()
         .filter(|(k, _)| !matches!(k.as_str(), "name" | "description" | "allowed-tools"))
         .collect();
 
-    Ok(fm)
+    Ok(FrontMatter {
+        name,
+        description,
+        allowed_tools,
+        extra,
+    })
 }
 
 pub fn tokenize_tools(s: &str) -> Vec<String> {
