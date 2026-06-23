@@ -107,6 +107,7 @@ pub struct ExpandedItem {
 }
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum ExpandedKind {
     Skill(crate::agent::Skill),
     SkillAsset(SkillAsset),
