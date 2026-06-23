@@ -1,7 +1,8 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::agent::detect::{self, DetectedAgent, DetectedSource, Detector, SourceKind};
-use crate::agent::frontmatter::{self, FrontMatter, FrontMatterMapper};
+use crate::agent::frontmatter::{self, FrontMatter, FrontMatterMapper, split_frontmatter};
 use crate::agent::parse::{self, AgentsParser, SkillsParser};
 use crate::agent::permission::Permission;
 use crate::agent::write::{self, AgentsWriter, FrontMatterWriter, SkillsWriter};
@@ -20,6 +21,9 @@ impl SkillsParser for PiParser {
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
         parse::parse_standard_skills(&root.join(format!("{DIR}/skills")), self)
     }
+    fn parse_skills_in(&self, dir: &Path) -> anyhow::Result<SkillSet> {
+        parse::parse_standard_skills(dir, self)
+    }
 }
 
 impl AgentsParser for PiParser {
@@ -27,7 +31,78 @@ impl AgentsParser for PiParser {
         AgentName::new(NAME)
     }
     fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
-        parse::parse_standard_agents(&root.join(format!("{DIR}/agents")), self)
+        let dir = root.join(format!("{DIR}/agents"));
+        let mut agents = Vec::new();
+        if !dir.is_dir() {
+            return Ok(agents);
+        }
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let file_name = entry.file_name().to_string_lossy().into_owned();
+            let Some(name) = file_name
+                .strip_suffix(".agent.md")
+                .or_else(|| file_name.strip_suffix(".md"))
+            else {
+                continue;
+            };
+            let content = fs::read_to_string(&path)?;
+            let (yaml, body) = split_frontmatter(&content);
+            let front_matter = match yaml {
+                Some(y) => self.parse_frontmatter(y)?,
+                None => FrontMatter::default(),
+            };
+            agents.push(Agent {
+                name: name.to_owned(),
+                file: path,
+                front_matter,
+                body: body.to_string(),
+            });
+        }
+        agents.sort_by_key(|a| a.name.clone());
+        Ok(agents)
+    }
+
+    fn parse_agents_in(&self, dir: &Path) -> anyhow::Result<AgentSet> {
+        // pi agent files use either `<name>.agent.md` or `<name>.md`. The
+        // default impl only knows about `.agent.md`, so this duplicates the
+        // suffix handling here (without the `.pi/agents` prefix that
+        // `parse_agents` uses).
+        let mut agents = Vec::new();
+        if !dir.is_dir() {
+            return Ok(agents);
+        }
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let file_name = entry.file_name().to_string_lossy().into_owned();
+            let Some(name) = file_name
+                .strip_suffix(".agent.md")
+                .or_else(|| file_name.strip_suffix(".md"))
+            else {
+                continue;
+            };
+            let content = fs::read_to_string(&path)?;
+            let (yaml, body) = split_frontmatter(&content);
+            let front_matter = match yaml {
+                Some(y) => self.parse_frontmatter(y)?,
+                None => FrontMatter::default(),
+            };
+            agents.push(Agent {
+                name: name.to_owned(),
+                file: path,
+                front_matter,
+                body: body.to_string(),
+            });
+        }
+        agents.sort_by_key(|a| a.name.clone());
+        Ok(agents)
     }
 }
 
@@ -65,7 +140,17 @@ impl AgentsWriter for PiParser {
         AgentName::new(NAME)
     }
     fn write_agent(&self, root: &Path, agent: &Agent) -> anyhow::Result<PathBuf> {
-        write::write_standard_agent(&root.join(format!("{DIR}/agents")), agent, self)
+        let dir = root.join(format!("{DIR}/agents"));
+        fs::create_dir_all(&dir)?;
+        let file = dir.join(format!("{}.md", agent.name));
+        let yaml = self.format_frontmatter(&agent.front_matter);
+        let content = if yaml.is_empty() {
+            agent.body.clone()
+        } else {
+            frontmatter::join_frontmatter(&yaml, &agent.body)
+        };
+        fs::write(&file, &content)?;
+        Ok(file)
     }
 }
 
@@ -79,7 +164,20 @@ impl Detector for PiParser {
         let agents_dir = root.join(format!("{DIR}/agents"));
 
         let has_skills = detect::dir_has_standard_skills(&skills_dir);
-        let has_agents = detect::dir_has_standard_agents(&agents_dir);
+        let has_agents = agents_dir.is_dir()
+            && fs::read_dir(&agents_dir)
+                .ok()
+                .map(|entries| {
+                    entries.filter_map(Result::ok).any(|entry| {
+                        let path = entry.path();
+                        path.is_file()
+                            && path
+                                .file_name()
+                                .and_then(|name| name.to_str())
+                                .is_some_and(|name| name.ends_with(".md") && name != "README.md")
+                    })
+                })
+                .unwrap_or(false);
 
         if !has_skills && !has_agents {
             return None;

@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use ignore::WalkBuilder;
+
 use crate::agent::{
     self,
     frontmatter::{FrontMatter, FrontMatterMapper, split_frontmatter, tokenize_tools},
@@ -28,14 +30,14 @@ pub fn expand_rule(root: &Path, rule: &Rule) -> anyhow::Result<Vec<ExpandedItem>
 
 /// Handle the non-collection kinds (skill, agent, skill-set, agent-set, system).
 fn expand_local_or_github(root: &Path, rule: &Rule) -> anyhow::Result<Vec<ExpandedItem>> {
-    let (project_root, abs_path) = materialize(root, &rule.source)?;
+    let (_, abs_path) = materialize(root, &rule.source)?;
 
     match &rule.kind {
         RuleKind::SkillSet { include, exclude } => {
-            expand_skill_set(&project_root, rule, &abs_path, include, exclude)
+            expand_skill_set(rule, &abs_path, include, exclude)
         }
         RuleKind::AgentSet { include, exclude } => {
-            expand_agent_set(&project_root, rule, &abs_path, include, exclude)
+            expand_agent_set(rule, &abs_path, include, exclude)
         }
         RuleKind::Skill {
             name,
@@ -188,20 +190,19 @@ fn materialize(root: &Path, source: &Source) -> anyhow::Result<(PathBuf, PathBuf
 }
 
 fn expand_skill_set(
-    root: &Path,
     rule: &Rule,
     abs_path: &Path,
     include: &[String],
     exclude: &[String],
 ) -> anyhow::Result<Vec<ExpandedItem>> {
+    // Read directly from the rule's `source` path. The schema agent's
+    // canonical folder (e.g. `.claude/skills`) is irrelevant here — a
+    // `SkillSet` rule may point at any folder.
     let parser = agent::skills_parser(&rule.schema_agent)
         .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", rule.schema_agent))?;
-    let skills = parser.parse_skills(root)?;
+    let skills = parser.parse_skills_in(abs_path)?;
     let mut items = Vec::new();
     for skill in &skills {
-        if !skill.dir.starts_with(abs_path) {
-            continue;
-        }
         if !passes_filter(&skill.name, include, exclude) {
             continue;
         }
@@ -214,25 +215,23 @@ fn expand_skill_set(
             source_hash: hash,
             kind: ExpandedKind::Skill(skill.clone()),
         });
+        items.extend(expand_skill_assets(rule, &skill.name, &skill.dir)?);
     }
     Ok(items)
 }
 
 fn expand_agent_set(
-    root: &Path,
     rule: &Rule,
     abs_path: &Path,
     include: &[String],
     exclude: &[String],
 ) -> anyhow::Result<Vec<ExpandedItem>> {
+    // Read directly from the rule's `source` path. See expand_skill_set.
     let parser = agent::agents_parser(&rule.schema_agent)
         .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", rule.schema_agent))?;
-    let agents = parser.parse_agents(root)?;
+    let agents = parser.parse_agents_in(abs_path)?;
     let mut items = Vec::new();
     for ag in &agents {
-        if !ag.file.starts_with(abs_path) {
-            continue;
-        }
         if !passes_filter(&ag.name, include, exclude) {
             continue;
         }
@@ -246,6 +245,55 @@ fn expand_agent_set(
             kind: ExpandedKind::Agent(ag.clone()),
         });
     }
+    Ok(items)
+}
+
+fn expand_skill_assets(
+    rule: &Rule,
+    skill_name: &str,
+    skill_dir: &Path,
+) -> anyhow::Result<Vec<ExpandedItem>> {
+    let walker = WalkBuilder::new(skill_dir)
+        .hidden(false)
+        .git_ignore(true)
+        .git_exclude(false)
+        .git_global(false)
+        .parents(true)
+        .require_git(false)
+        .build();
+
+    let mut files = Vec::new();
+    for entry in walker {
+        let entry = entry?;
+        let path = entry.path();
+        if path == skill_dir || path == skill_dir.join("SKILL.md") {
+            continue;
+        }
+        if entry.file_type().is_some_and(|kind| kind.is_file()) {
+            files.push(path.to_path_buf());
+        }
+    }
+    files.sort();
+
+    let mut items = Vec::new();
+    for file in files {
+        let relative_path = file.strip_prefix(skill_dir)?.to_path_buf();
+        let content = fs::read_to_string(&file)?;
+        let hash = hash_content(&content);
+        items.push(ExpandedItem {
+            rule_id: rule.id.clone(),
+            source: rule.source.clone(),
+            source_content: content.clone(),
+            source_hash: hash,
+            kind: ExpandedKind::SkillAsset(super::SkillAsset {
+                skill_name: skill_name.to_string(),
+                source_file: file,
+                relative_path,
+                content,
+            }),
+        });
+    }
+
     Ok(items)
 }
 
@@ -283,19 +331,21 @@ fn expand_single_skill(
     );
     let hash = hash_content(&content);
     let skill = crate::agent::Skill {
-        name,
+        name: name.clone(),
         dir: abs_path.to_path_buf(),
         file: skill_file,
         front_matter,
         body: body.to_string(),
     };
-    Ok(vec![ExpandedItem {
+    let mut items = vec![ExpandedItem {
         rule_id: rule.id.clone(),
         source: rule.source.clone(),
         source_content: content,
         source_hash: hash,
         kind: ExpandedKind::Skill(skill),
-    }])
+    }];
+    items.extend(expand_skill_assets(rule, &name, abs_path)?);
+    Ok(items)
 }
 
 fn expand_single_system(rule: &Rule, abs_path: &Path) -> anyhow::Result<Vec<ExpandedItem>> {
@@ -334,10 +384,17 @@ fn expand_single_agent(
         .file_name()
         .ok_or_else(|| anyhow::anyhow!("agent path has no file name"))?
         .to_string_lossy();
-    let agent_name = file_name
-        .strip_suffix(".agent.md")
-        .ok_or_else(|| anyhow::anyhow!("agent file must end with .agent.md: {}", file_name))?
-        .to_owned();
+    let agent_name = if rule.schema_agent.as_str() == "pi" {
+        file_name
+            .strip_suffix(".md")
+            .ok_or_else(|| anyhow::anyhow!("pi agent file must end with .md: {}", file_name))?
+            .to_owned()
+    } else {
+        file_name
+            .strip_suffix(".agent.md")
+            .ok_or_else(|| anyhow::anyhow!("agent file must end with .agent.md: {}", file_name))?
+            .to_owned()
+    };
     let content = fs::read_to_string(abs_path)?;
     let (yaml, body) = split_frontmatter(&content);
     let mut front_matter = match yaml {

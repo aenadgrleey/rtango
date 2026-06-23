@@ -14,6 +14,14 @@ fn setup_copilot_skill(root: &Path, name: &str, body: &str) {
     fs::write(dir.join("SKILL.md"), body).unwrap();
 }
 
+fn setup_copilot_skill_asset(root: &Path, name: &str, relative_path: &str, body: &str) {
+    let path = root.join(format!(".github/skills/{}/{}", name, relative_path));
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(path, body).unwrap();
+}
+
 fn write_spec(root: &Path, spec: &Spec) {
     let yaml = serde_yml::to_string(spec).unwrap();
     fs::create_dir_all(root.join(".rtango")).unwrap();
@@ -84,6 +92,60 @@ fn basic_sync_creates_files_and_updates_lock() {
     assert_eq!(lock.deployments[0].rule_id, "skills");
     assert_eq!(lock.deployments[0].agent, AgentName::new("claude-code"));
     assert_eq!(lock.tracked_agents, vec![AgentName::new("claude-code")]);
+}
+
+#[test]
+fn sync_materializes_multi_file_skill_assets_and_gitignores_skill_dir() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    setup_copilot_skill(root, "deploy", "Deploy instructions");
+    setup_copilot_skill_asset(root, "deploy", "REFERENCE.md", "# Reference\n");
+    setup_copilot_skill_asset(root, "deploy", "templates/example.txt", "template\n");
+    setup_copilot_skill_asset(root, "deploy", ".gitignore", ".env\n");
+    setup_copilot_skill_asset(root, "deploy", ".env", "SECRET=1\n");
+
+    let spec = make_spec_with_defaults(
+        vec!["pi"],
+        Defaults {
+            on_target_modified: Default::default(),
+            gitignore_targets: true,
+        },
+        vec![single_skill_rule(
+            "deploy",
+            ".github/skills/deploy",
+            "copilot",
+        )],
+    );
+    write_spec(root, &spec);
+
+    rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
+
+    assert_eq!(
+        fs::read_to_string(root.join(".pi/skills/deploy/SKILL.md")).unwrap(),
+        "Deploy instructions"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join(".pi/skills/deploy/REFERENCE.md")).unwrap(),
+        "# Reference\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join(".pi/skills/deploy/templates/example.txt")).unwrap(),
+        "template\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join(".pi/skills/deploy/.gitignore")).unwrap(),
+        ".env\n"
+    );
+    assert!(!root.join(".pi/skills/deploy/.env").exists());
+
+    let gitignore = fs::read_to_string(root.join(".gitignore")).unwrap();
+    assert!(gitignore.contains(".pi/skills/deploy/"));
+    assert!(!gitignore.contains("REFERENCE.md"));
+    assert!(!gitignore.contains("templates/example.txt"));
+
+    let lock = load_lock(root).unwrap();
+    assert_eq!(lock.deployments.len(), 4);
 }
 
 #[test]

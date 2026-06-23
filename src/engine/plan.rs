@@ -35,7 +35,25 @@ fn target_path_for(agent: &AgentName, kind: &ExpandedKind) -> anyhow::Result<Pat
     };
     match kind {
         ExpandedKind::Skill(s) => Ok(PathBuf::from(format!("{prefix}skills/{}/SKILL.md", s.name))),
-        ExpandedKind::Agent(a) => Ok(PathBuf::from(format!("{prefix}agents/{}.agent.md", a.name))),
+        ExpandedKind::SkillAsset(asset) => {
+            let mut path = if prefix.is_empty() {
+                PathBuf::new()
+            } else {
+                PathBuf::from(&prefix)
+            };
+            path.push("skills");
+            path.push(&asset.skill_name);
+            path.push(&asset.relative_path);
+            Ok(path)
+        }
+        ExpandedKind::Agent(a) => {
+            let file_name = if agent.as_str() == "pi" {
+                format!("{}.md", a.name)
+            } else {
+                format!("{}.agent.md", a.name)
+            };
+            Ok(PathBuf::from(format!("{prefix}agents/{file_name}")))
+        }
         ExpandedKind::System(_) => unreachable!("handled above"),
     }
 }
@@ -62,13 +80,16 @@ pub fn render_for_agent(
 ) -> anyhow::Result<RenderedTarget> {
     let content = match &item.kind {
         ExpandedKind::System(s) => s.body.clone(),
+        ExpandedKind::SkillAsset(asset) => asset.content.clone(),
         ExpandedKind::Skill(_) | ExpandedKind::Agent(_) => {
             let writer = agent::frontmatter_writer(target_agent)
                 .ok_or_else(|| anyhow::anyhow!("unknown target agent: {}", target_agent))?;
             let (fm, body) = match &item.kind {
                 ExpandedKind::Skill(s) => (&s.front_matter, &s.body),
                 ExpandedKind::Agent(a) => (&a.front_matter, &a.body),
-                ExpandedKind::System(_) => unreachable!("handled above"),
+                ExpandedKind::SkillAsset(_) | ExpandedKind::System(_) => {
+                    unreachable!("handled above")
+                }
             };
             let yaml = writer.format_frontmatter(fm);
             if yaml.is_empty() {
@@ -210,6 +231,7 @@ fn compute_plan_from_expanded_rules(
         for exp_item in &expanded_rule.items {
             let source_file = match &exp_item.kind {
                 ExpandedKind::Skill(s) => &s.file,
+                ExpandedKind::SkillAsset(asset) => &asset.source_file,
                 ExpandedKind::Agent(a) => &a.file,
                 ExpandedKind::System(s) => &s.file,
             };
@@ -532,6 +554,7 @@ fn collect_candidates_from_expanded_rules(
         for item in &expanded_rule.items {
             let source_file = match &item.kind {
                 ExpandedKind::Skill(s) => s.file.clone(),
+                ExpandedKind::SkillAsset(asset) => asset.source_file.clone(),
                 ExpandedKind::Agent(a) => a.file.clone(),
                 ExpandedKind::System(s) => s.file.clone(),
             };

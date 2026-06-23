@@ -29,6 +29,12 @@ fn setup_claude_skill(root: &std::path::Path, name: &str, body: &str) {
     fs::write(dir.join("SKILL.md"), body).unwrap();
 }
 
+fn setup_pi_agent(root: &std::path::Path, name: &str, body: &str) {
+    let dir = root.join(".pi/agents");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join(format!("{}.md", name)), body).unwrap();
+}
+
 fn empty_lock() -> Lock {
     Lock {
         version: 1,
@@ -112,6 +118,111 @@ fn expand_skill_set_finds_all_skills() {
 }
 
 #[test]
+fn expand_skill_set_reads_from_non_native_source_path() {
+    // Regression: a SkillSet rule whose `source` lives outside the schema
+    // agent's canonical native folder used to silently return zero items
+    // because the parser was hardcoded to read from <root>/<native_dir>.
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    fs::create_dir_all(root.join("my-team/skills/alpha")).unwrap();
+    fs::write(
+        root.join("my-team/skills/alpha/SKILL.md"),
+        "---\nname: Alpha\n---\nAlpha body",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("my-team/skills/beta")).unwrap();
+    fs::write(
+        root.join("my-team/skills/beta/SKILL.md"),
+        "---\nname: Beta\n---\nBeta body",
+    )
+    .unwrap();
+    // Decoy: a skill at the schema agent's native folder should NOT be picked up.
+    setup_copilot_skill(root, "decoy", "Ignored");
+
+    let rule = skill_set_rule("my-team", "my-team/skills/", "claude-code");
+    let items = expand_rule(root, &rule).unwrap();
+
+    let names: Vec<&str> = items
+        .iter()
+        .filter_map(|i| match &i.kind {
+            ExpandedKind::Skill(s) => Some(s.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(names.len(), 2);
+    assert!(names.contains(&"alpha"));
+    assert!(names.contains(&"beta"));
+    assert!(!names.contains(&"decoy"));
+}
+
+#[test]
+fn expand_agent_set_reads_from_non_native_source_path() {
+    // Same regression for AgentSet.
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    fs::create_dir_all(root.join("my-team/agents")).unwrap();
+    fs::write(
+        root.join("my-team/agents/reviewer.agent.md"),
+        "---\nname: reviewer\n---\nReviews",
+    )
+    .unwrap();
+    fs::write(
+        root.join("my-team/agents/planner.agent.md"),
+        "---\nname: planner\n---\nPlans",
+    )
+    .unwrap();
+    setup_copilot_agent(root, "decoy", "Ignored");
+
+    let rule = agent_set_rule("my-team", "my-team/agents/", "claude-code");
+    let items = expand_rule(root, &rule).unwrap();
+
+    let names: Vec<&str> = items
+        .iter()
+        .filter_map(|i| match &i.kind {
+            ExpandedKind::Agent(a) => Some(a.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(names.len(), 2);
+    assert!(names.contains(&"reviewer"));
+    assert!(names.contains(&"planner"));
+    assert!(!names.contains(&"decoy"));
+}
+
+#[test]
+fn expand_pi_agent_set_reads_md_suffix_from_non_native_source_path() {
+    // pi agent files use `<name>.md` (not `.agent.md`). A non-native source
+    // must still honour that suffix.
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    fs::create_dir_all(root.join("my-team/agents")).unwrap();
+    fs::write(
+        root.join("my-team/agents/reviewer.md"),
+        "---\nname: reviewer\n---\nReviews",
+    )
+    .unwrap();
+    fs::write(
+        root.join("my-team/agents/planner.agent.md"),
+        "---\nname: planner\n---\nPlans",
+    )
+    .unwrap();
+
+    let rule = agent_set_rule("my-team", "my-team/agents/", "pi");
+    let items = expand_rule(root, &rule).unwrap();
+
+    let names: Vec<&str> = items
+        .iter()
+        .filter_map(|i| match &i.kind {
+            ExpandedKind::Agent(a) => Some(a.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(names.len(), 2);
+    assert!(names.contains(&"reviewer"));
+    assert!(names.contains(&"planner"));
+}
+
+#[test]
 fn expand_agent_set_finds_all_agents() {
     let tmp = TempDir::new().unwrap();
     let root = tmp.path();
@@ -153,6 +264,38 @@ fn expand_single_skill() {
 }
 
 #[test]
+fn expand_single_skill_includes_auxiliary_files() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_copilot_skill(root, "my-skill", "---\nname: My Skill\n---\nHello world");
+    fs::write(
+        root.join(".github/skills/my-skill/REFERENCE.md"),
+        "# Reference\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join(".github/skills/my-skill/templates")).unwrap();
+    fs::write(
+        root.join(".github/skills/my-skill/templates/example.txt"),
+        "template\n",
+    )
+    .unwrap();
+
+    let rule = single_skill_rule("s1", ".github/skills/my-skill", "copilot");
+    let items = expand_rule(root, &rule).unwrap();
+
+    assert_eq!(items.len(), 3);
+    let asset_paths: Vec<PathBuf> = items
+        .iter()
+        .filter_map(|i| match &i.kind {
+            ExpandedKind::SkillAsset(asset) => Some(asset.relative_path.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(asset_paths.contains(&PathBuf::from("REFERENCE.md")));
+    assert!(asset_paths.contains(&PathBuf::from("templates/example.txt")));
+}
+
+#[test]
 fn expand_single_agent() {
     let tmp = TempDir::new().unwrap();
     let root = tmp.path();
@@ -173,6 +316,41 @@ fn expand_single_agent() {
         }
         _ => panic!("expected agent"),
     }
+}
+
+#[test]
+fn expand_single_pi_agent() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    setup_pi_agent(
+        root,
+        "reviewer",
+        "---\nname: reviewer\ndescription: reviews code\n---\nYou review code.\n",
+    );
+
+    let rule = single_agent_rule("a1", ".pi/agents/reviewer.md", "pi");
+    let items = expand_rule(root, &rule).unwrap();
+
+    assert_eq!(items.len(), 1);
+    match &items[0].kind {
+        ExpandedKind::Agent(a) => {
+            assert_eq!(a.name, "reviewer");
+            assert_eq!(a.body, "You review code.\n");
+        }
+        _ => panic!("expected agent"),
+    }
+
+    let rendered = render_for_agent(
+        root,
+        &items[0],
+        &AgentName::new("pi"),
+        &AgentName::new("pi"),
+    )
+    .unwrap();
+    assert_eq!(
+        rendered.target_path,
+        PathBuf::from(".pi/agents/reviewer.md")
+    );
 }
 
 #[test]

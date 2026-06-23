@@ -109,8 +109,19 @@ pub struct ExpandedItem {
 #[derive(Debug, Clone)]
 pub enum ExpandedKind {
     Skill(crate::agent::Skill),
+    SkillAsset(SkillAsset),
     Agent(crate::agent::Agent),
     System(SystemFile),
+}
+
+/// An auxiliary file that lives alongside a skill directory and should be
+/// materialized under the target agent's corresponding skill directory.
+#[derive(Debug, Clone)]
+pub struct SkillAsset {
+    pub skill_name: String,
+    pub source_file: PathBuf,
+    pub relative_path: PathBuf,
+    pub content: String,
 }
 
 /// A single root-level instruction file (CLAUDE.md / AGENTS.md / etc.).
@@ -179,8 +190,25 @@ pub fn managed_gitignore_entries(plan: &Plan, rule_filter: Option<&str>) -> Vec<
 
 fn gitignore_entry_for_target(target_path: &Path) -> String {
     let normalized = target_path.to_string_lossy().replace('\\', "/");
-    if let Some(parent) = normalized.strip_suffix("/SKILL.md") {
-        return format!("{parent}/");
+    if let Some(skill_root) = skill_root_for_target(&normalized) {
+        return format!("{skill_root}/");
     }
     normalized
+}
+
+fn skill_root_for_target(normalized: &str) -> Option<&str> {
+    let mut segments = normalized.split('/').peekable();
+    let mut consumed = Vec::new();
+
+    while let Some(segment) = segments.next() {
+        consumed.push(segment);
+        if segment != "skills" {
+            continue;
+        }
+        let skill_name = segments.next()?;
+        consumed.push(skill_name);
+        return Some(&normalized[..consumed.join("/").len()]);
+    }
+
+    None
 }
