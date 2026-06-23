@@ -20,9 +20,6 @@ impl SkillsParser for CodexParser {
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
         parse::parse_standard_skills(&root.join(format!("{DIR}/skills")), self)
     }
-    fn parse_skills_in(&self, dir: &Path) -> anyhow::Result<SkillSet> {
-        parse::parse_standard_skills(dir, self)
-    }
 }
 
 impl AgentsParser for CodexParser {
@@ -31,9 +28,6 @@ impl AgentsParser for CodexParser {
     }
     fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
         parse::parse_standard_agents(&root.join(format!("{DIR}/agents")), self)
-    }
-    fn parse_agents_in(&self, dir: &Path) -> anyhow::Result<AgentSet> {
-        parse::parse_standard_agents(dir, self)
     }
 }
 

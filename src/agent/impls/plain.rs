@@ -19,9 +19,6 @@ impl SkillsParser for PlainParser {
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
         parse::parse_standard_skills(&root.join("skills"), self)
     }
-    fn parse_skills_in(&self, dir: &Path) -> anyhow::Result<SkillSet> {
-        parse::parse_standard_skills(dir, self)
-    }
 }
 
 impl AgentsParser for PlainParser {
@@ -30,9 +27,6 @@ impl AgentsParser for PlainParser {
     }
     fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
         parse::parse_standard_agents(&root.join("agents"), self)
-    }
-    fn parse_agents_in(&self, dir: &Path) -> anyhow::Result<AgentSet> {
-        parse::parse_standard_agents(dir, self)
     }
 }
 

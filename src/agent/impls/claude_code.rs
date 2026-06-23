@@ -17,9 +17,6 @@ impl SkillsParser for ClaudeCodeParser {
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
         parse::parse_standard_skills(&root.join(".claude/skills"), self)
     }
-    fn parse_skills_in(&self, dir: &Path) -> anyhow::Result<SkillSet> {
-        parse::parse_standard_skills(dir, self)
-    }
 }
 
 impl AgentsParser for ClaudeCodeParser {
@@ -28,9 +25,6 @@ impl AgentsParser for ClaudeCodeParser {
     }
     fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
         parse::parse_standard_agents(&root.join(".claude/agents"), self)
-    }
-    fn parse_agents_in(&self, dir: &Path) -> anyhow::Result<AgentSet> {
-        parse::parse_standard_agents(dir, self)
     }
 }
 

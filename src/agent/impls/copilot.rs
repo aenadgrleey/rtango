@@ -17,9 +17,6 @@ impl SkillsParser for CopilotParser {
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
         parse::parse_standard_skills(&root.join(".github/skills"), self)
     }
-    fn parse_skills_in(&self, dir: &Path) -> anyhow::Result<SkillSet> {
-        parse::parse_standard_skills(dir, self)
-    }
 }
 
 impl AgentsParser for CopilotParser {
@@ -28,9 +25,6 @@ impl AgentsParser for CopilotParser {
     }
     fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
         parse::parse_standard_agents(&root.join(".github/agents"), self)
-    }
-    fn parse_agents_in(&self, dir: &Path) -> anyhow::Result<AgentSet> {
-        parse::parse_standard_agents(dir, self)
     }
 }
 

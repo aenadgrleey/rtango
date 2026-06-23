@@ -198,9 +198,9 @@ fn expand_skill_set(
     // Read directly from the rule's `source` path. The schema agent's
     // canonical folder (e.g. `.claude/skills`) is irrelevant here — a
     // `SkillSet` rule may point at any folder.
-    let parser = agent::skills_parser(&rule.schema_agent)
+    let mapper = agent::frontmatter_mapper(&rule.schema_agent)
         .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", rule.schema_agent))?;
-    let skills = parser.parse_skills_in(abs_path)?;
+    let skills = agent::parse_standard_skills(abs_path, mapper.as_ref())?;
     let mut items = Vec::new();
     for skill in &skills {
         if !passes_filter(&skill.name, include, exclude) {
@@ -227,9 +227,13 @@ fn expand_agent_set(
     exclude: &[String],
 ) -> anyhow::Result<Vec<ExpandedItem>> {
     // Read directly from the rule's `source` path. See expand_skill_set.
-    let parser = agent::agents_parser(&rule.schema_agent)
+    let mapper = agent::frontmatter_mapper(&rule.schema_agent)
         .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", rule.schema_agent))?;
-    let agents = parser.parse_agents_in(abs_path)?;
+    let agents = if rule.schema_agent.as_str() == "pi" {
+        agent::PiParser::parse_agents_in(abs_path, mapper.as_ref())?
+    } else {
+        agent::parse_standard_agents(abs_path, mapper.as_ref())?
+    };
     let mut items = Vec::new();
     for ag in &agents {
         if !passes_filter(&ag.name, include, exclude) {

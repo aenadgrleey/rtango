@@ -9,29 +9,11 @@ use super::{Agent, AgentSet, Skill, SkillSet};
 pub trait SkillsParser {
     fn name(&self) -> AgentName;
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet>;
-
-    /// Parse skills from an explicit directory. Used by `SkillSet` rules
-    /// whose `source` is any folder (not necessarily the schema agent's
-    /// canonical native folder).
-    ///
-    /// Default convention is `<dir>/<name>/SKILL.md` — implemented by
-    /// delegating to `parse_standard_skills`. Implementors override only if
-    /// their on-disk layout differs.
-    fn parse_skills_in(&self, dir: &Path) -> anyhow::Result<SkillSet>;
 }
 
 pub trait AgentsParser {
     fn name(&self) -> AgentName;
     fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet>;
-
-    /// Parse agents from an explicit directory. Used by `AgentSet` rules
-    /// whose `source` is any folder (not necessarily the schema agent's
-    /// canonical native folder).
-    ///
-    /// Default convention is `<dir>/<name>.agent.md` — implemented by
-    /// delegating to `parse_standard_agents`. Implementors override if
-    /// their on-disk layout differs (e.g. pi accepts `.md` too).
-    fn parse_agents_in(&self, dir: &Path) -> anyhow::Result<AgentSet>;
 }
 
 /// Parse skills from subdirectories containing `SKILL.md`.

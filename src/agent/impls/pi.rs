@@ -14,24 +14,14 @@ const DIR: &str = ".pi";
 
 pub struct PiParser;
 
-impl SkillsParser for PiParser {
-    fn name(&self) -> AgentName {
-        AgentName::new(NAME)
-    }
-    fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
-        parse::parse_standard_skills(&root.join(format!("{DIR}/skills")), self)
-    }
-    fn parse_skills_in(&self, dir: &Path) -> anyhow::Result<SkillSet> {
-        parse::parse_standard_skills(dir, self)
-    }
-}
-
-impl AgentsParser for PiParser {
-    fn name(&self) -> AgentName {
-        AgentName::new(NAME)
-    }
-    fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
-        let dir = root.join(format!("{DIR}/agents"));
+impl PiParser {
+    /// Parse pi agent files from an arbitrary directory.
+    ///
+    /// pi accepts either `<name>.agent.md` or `<name>.md` (the standard
+    /// `parse_standard_agents` only handles `.agent.md`). Used by the
+    /// engine for `AgentSet` rules whose `source` points outside pi's
+    /// native folder.
+    pub fn parse_agents_in(dir: &Path, mapper: &dyn FrontMatterMapper) -> anyhow::Result<AgentSet> {
         let mut agents = Vec::new();
         if !dir.is_dir() {
             return Ok(agents);
@@ -52,7 +42,7 @@ impl AgentsParser for PiParser {
             let content = fs::read_to_string(&path)?;
             let (yaml, body) = split_frontmatter(&content);
             let front_matter = match yaml {
-                Some(y) => self.parse_frontmatter(y)?,
+                Some(y) => mapper.parse_frontmatter(y)?,
                 None => FrontMatter::default(),
             };
             agents.push(Agent {
@@ -65,12 +55,23 @@ impl AgentsParser for PiParser {
         agents.sort_by_key(|a| a.name.clone());
         Ok(agents)
     }
+}
 
-    fn parse_agents_in(&self, dir: &Path) -> anyhow::Result<AgentSet> {
-        // pi agent files use either `<name>.agent.md` or `<name>.md`. The
-        // default impl only knows about `.agent.md`, so this duplicates the
-        // suffix handling here (without the `.pi/agents` prefix that
-        // `parse_agents` uses).
+impl SkillsParser for PiParser {
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
+    fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
+        parse::parse_standard_skills(&root.join(format!("{DIR}/skills")), self)
+    }
+}
+
+impl AgentsParser for PiParser {
+    fn name(&self) -> AgentName {
+        AgentName::new(NAME)
+    }
+    fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
+        let dir = root.join(format!("{DIR}/agents"));
         let mut agents = Vec::new();
         if !dir.is_dir() {
             return Ok(agents);
