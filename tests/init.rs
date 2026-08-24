@@ -97,6 +97,25 @@ fn detect_copilot_by_agents_dir() {
 }
 
 #[test]
+fn detect_cursor_by_skills_dir() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_file(
+        &tmp.path().join(".cursor/skills/reviewer/SKILL.md"),
+        "---\nname: reviewer\n---\nbody",
+    );
+
+    let agents = detect_agents(tmp.path());
+    assert_eq!(agents.len(), 1);
+    assert_eq!(agents[0].name, AgentName::new("cursor"));
+    assert!(
+        agents[0]
+            .sources
+            .iter()
+            .any(|source| source.kind == SourceKind::SkillSet)
+    );
+}
+
+#[test]
 fn detect_both_agents() {
     let tmp = tempfile::tempdir().unwrap();
     write_file(

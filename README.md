@@ -6,7 +6,7 @@ Author a skill once — in whichever agent's format you prefer — and `rtango` 
 
 ## Why
 
-Modern projects juggle several coding agents (Claude Code, Copilot, Codex, OpenCode, Pi, …). Each one stores skills, agents, and instruction files in different paths with different frontmatter and different permission vocabularies. Hand-porting and keeping them in sync is tedious and error-prone.
+Modern projects juggle several coding agents (Claude Code, Copilot, Cursor, Codex, OpenCode, Pi, …). Each one stores skills, agents, and instruction files in different paths with different frontmatter and different permission vocabularies. Hand-porting and keeping them in sync is tedious and error-prone.
 
 `rtango` treats this like a package manager: declare rules in `.rtango/spec.yaml`, run `rtango sync`, and every agent gets an up-to-date rendering.
 
@@ -102,7 +102,7 @@ After changing shared agent files or `.rtango/spec.yaml`, run:
 
 ## Supported agents
 
-Claude Code, GitHub Copilot, Codex, OpenCode, Pi. Each has its own parser, writer, and permission mapper under `src/agent/`.
+Claude Code, GitHub Copilot, Cursor, Codex, OpenCode, Pi. Each has its own parser, writer, and permission mapper under `src/agent/`.
 
 ## Layout
 

@@ -95,6 +95,32 @@ fn basic_sync_creates_files_and_updates_lock() {
 }
 
 #[test]
+fn sync_writes_cursor_skill_to_cursor_directory() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    setup_copilot_skill(
+        root,
+        "reviewer",
+        "---\nname: reviewer\ndescription: Reviews changes\nallowed-tools: read\n---\nReview the diff.\n",
+    );
+
+    let spec = make_spec(
+        vec!["cursor"],
+        vec![skill_set_rule("skills", ".github/skills", "copilot")],
+    );
+    write_spec(root, &spec);
+
+    rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
+
+    let target = root.join(".cursor/skills/reviewer/SKILL.md");
+    let content = fs::read_to_string(target).unwrap();
+    assert!(content.contains("description: Reviews changes"));
+    assert!(content.contains("Review the diff."));
+    assert!(!content.contains("allowed-tools:"));
+}
+
+#[test]
 fn sync_materializes_multi_file_skill_assets_and_gitignores_skill_dir() {
     let tmp = TempDir::new().unwrap();
     let root = tmp.path();

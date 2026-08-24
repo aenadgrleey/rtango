@@ -231,6 +231,8 @@ fn expand_agent_set(
         .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", rule.schema_agent))?;
     let agents = if rule.schema_agent.as_str() == "pi" {
         agent::PiParser::parse_agents_in(abs_path, mapper.as_ref())?
+    } else if rule.schema_agent.as_str() == "cursor" {
+        agent::CursorParser::parse_agents_in(abs_path, mapper.as_ref())?
     } else {
         agent::parse_standard_agents(abs_path, mapper.as_ref())?
     };

@@ -1,7 +1,14 @@
 use rtango::agent::{agents_parser, frontmatter_mapper, skills_parser};
 use rtango::spec::AgentName;
 
-const KNOWN_AGENTS: &[&str] = &["copilot", "claude-code", "codex", "pi", "opencode"];
+const KNOWN_AGENTS: &[&str] = &[
+    "copilot",
+    "cursor",
+    "claude-code",
+    "codex",
+    "pi",
+    "opencode",
+];
 
 #[test]
 fn skills_parser_known() {

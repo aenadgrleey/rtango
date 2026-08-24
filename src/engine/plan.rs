@@ -21,6 +21,7 @@ fn target_path_for(agent: &AgentName, kind: &ExpandedKind) -> anyhow::Result<Pat
     }
     let dir = match agent.as_str() {
         "copilot" => ".github",
+        "cursor" => ".cursor",
         "claude-code" => ".claude",
         "codex" => ".codex",
         "pi" => ".pi",
@@ -47,7 +48,7 @@ fn target_path_for(agent: &AgentName, kind: &ExpandedKind) -> anyhow::Result<Pat
             Ok(path)
         }
         ExpandedKind::Agent(a) => {
-            let file_name = if agent.as_str() == "pi" {
+            let file_name = if matches!(agent.as_str(), "pi" | "cursor") {
                 format!("{}.md", a.name)
             } else {
                 format!("{}.agent.md", a.name)
@@ -62,6 +63,7 @@ fn target_path_for(agent: &AgentName, kind: &ExpandedKind) -> anyhow::Result<Pat
 fn system_file_path_for(agent: &AgentName) -> anyhow::Result<PathBuf> {
     Ok(match agent.as_str() {
         "copilot" => PathBuf::from(".github/copilot-instructions.md"),
+        "cursor" => PathBuf::from("AGENTS.md"),
         "claude-code" => PathBuf::from("CLAUDE.md"),
         "codex" => PathBuf::from("AGENTS.md"),
         "pi" => PathBuf::from("AGENTS.md"),

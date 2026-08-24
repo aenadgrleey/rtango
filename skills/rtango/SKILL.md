@@ -5,7 +5,7 @@ name: rtango
 
 # rtango Skill
 
-This skill teaches AI agents how to use `rtango` to manage and sync skills, agents, and instruction files across multiple coding agents (Claude Code, GitHub Copilot, Codex, OpenCode, Pi).
+This skill teaches AI agents how to use `rtango` to manage and sync skills, agents, and instruction files across multiple coding agents (Claude Code, GitHub Copilot, Cursor, Codex, OpenCode, Pi).
 
 ## What rtango Does
 
