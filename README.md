@@ -78,6 +78,15 @@ rtango wander --ignore-fetch-failures
 - **Rule** — a `{source, schema_agent, kind}` declaration in `spec.yaml`. Source is a local path or `github: owner/repo@ref:path`. `schema_agent` names the authoritative agent whose format the source is written in.
 - **Kinds** — `skill`, `skill-set`, `agent`, `agent-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md`), `collection` (import rules from another repo's `.rtango/spec.yaml`).
 - **Rendering** — for each agent in `spec.agents`, rtango rewrites frontmatter and permission tokens into that agent's native schema and writes to its canonical path. The `schema_agent`'s own target is auto-skipped when source and target paths collide.
+- **System files** — a `kind: system` rule copies one markdown source verbatim to each selected agent's instruction-file convention. The current target paths are:
+
+  | Agent | Target |
+  | --- | --- |
+  | Claude Code | `CLAUDE.md` |
+  | Codex, Cursor, OpenCode, Pi | `AGENTS.md` |
+  | GitHub Copilot | `.github/copilot-instructions.md` |
+  | Plain | `system/AGENTS.md` |
+
 - **Lock** — `.rtango/lock.yaml` records what was written, content hashes, and ownership decisions. Changes to target files detected outside rtango are caught by the `on_target_modified` policy (`fail` / `overwrite` / `skip`).
 - **Managed `.gitignore`** — optionally keep projected targets in a dedicated rtango block. Skill projections are ignored precisely as leaf directories (for example `.pi/skills/reviewer/`), while agent/system projections are ignored as exact files; broad roots like `.pi/` are never ignored.
 

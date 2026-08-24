@@ -354,6 +354,34 @@ fn system_file_syncs_per_agent_convention_paths() {
 }
 
 #[test]
+fn system_file_syncs_to_all_remaining_agent_paths() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    fs::write(root.join("source.md"), "# Shared instructions\n").unwrap();
+    let spec = make_spec(
+        vec!["cursor", "pi", "opencode", "plain"],
+        vec![system_rule("instructions", "source.md", "plain")],
+    );
+    write_spec(root, &spec);
+
+    rtango::cmd::sync::exec(root, false, false, None, false).unwrap();
+
+    let expected = "# Shared instructions\n";
+    for path in ["AGENTS.md", "system/AGENTS.md"] {
+        assert_eq!(
+            fs::read_to_string(root.join(path)).unwrap(),
+            expected,
+            "unexpected system-file content at {path}"
+        );
+    }
+
+    // Cursor, Pi, and OpenCode intentionally share the root AGENTS.md path.
+    let lock = load_lock(root).unwrap();
+    assert_eq!(lock.deployments.len(), 4);
+}
+
+#[test]
 fn system_file_handles_agents_sharing_target_path() {
     // codex and opencode both write to AGENTS.md — must not conflict.
     let tmp = TempDir::new().unwrap();
