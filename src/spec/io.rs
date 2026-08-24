@@ -6,10 +6,13 @@ use anyhow::Context;
 
 use crate::error::RtangoError;
 
-use super::{Lock, Spec};
+use serde::Deserialize;
+
+use super::{AgentName, Lock, OnTargetModified, Rule, Spec};
 
 const RTANGO_DIR: &str = ".rtango";
 const SPEC_FILE: &str = "spec.yaml";
+const LOCAL_SPEC_FILE: &str = "spec.local.yaml";
 const LOCK_FILE: &str = "lock.yaml";
 const GITIGNORE_FILE: &str = ".gitignore";
 const GITIGNORE_START: &str = "# >>> rtango managed targets >>>";
@@ -30,6 +33,10 @@ pub fn spec_path(root: &Path) -> std::path::PathBuf {
     rtango_dir(root).join(SPEC_FILE)
 }
 
+pub fn local_spec_path(root: &Path) -> std::path::PathBuf {
+    rtango_dir(root).join(LOCAL_SPEC_FILE)
+}
+
 pub fn lock_path(root: &Path) -> std::path::PathBuf {
     rtango_dir(root).join(LOCK_FILE)
 }
@@ -39,6 +46,25 @@ pub fn gitignore_path(root: &Path) -> std::path::PathBuf {
 }
 
 pub fn load_spec(root: &Path) -> anyhow::Result<Spec> {
+    let spec = load_main_spec(root)?;
+    let local_path = local_spec_path(root);
+    if !local_path.exists() {
+        return Ok(spec);
+    }
+
+    let content = fs::read_to_string(&local_path)
+        .with_context(|| format!("failed to read {}", local_path.display()))?;
+    let local: LocalSpec = serde_yml::from_str(&content)
+        .with_context(|| format!("failed to parse {}", local_path.display()))?;
+    merge_local_spec(spec, local)
+        .with_context(|| format!("failed to apply {}", local_path.display()))
+}
+
+/// Load only `.rtango/spec.yaml`, without applying `spec.local.yaml`.
+///
+/// Mutating commands use this so local-only overrides are never persisted into
+/// the shared spec by accident.
+pub fn load_main_spec(root: &Path) -> anyhow::Result<Spec> {
     let path = spec_path(root);
     let content =
         fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
@@ -46,6 +72,95 @@ pub fn load_spec(root: &Path) -> anyhow::Result<Spec> {
         .with_context(|| format!("failed to parse {}", path.display()))?;
     validate_spec(&spec)?;
     Ok(spec)
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalSpec {
+    version: u32,
+    #[serde(default)]
+    agents: Option<Vec<AgentName>>,
+    #[serde(default)]
+    defaults: Option<LocalDefaults>,
+    #[serde(default)]
+    exclude: Vec<String>,
+    #[serde(default)]
+    rules: Vec<Rule>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct LocalDefaults {
+    #[serde(default)]
+    on_target_modified: Option<OnTargetModified>,
+    #[serde(default)]
+    gitignore_targets: Option<bool>,
+}
+
+fn merge_local_spec(mut main: Spec, local: LocalSpec) -> anyhow::Result<Spec> {
+    if local.version != 1 {
+        anyhow::bail!(RtangoError::InvalidSpec(format!(
+            "unsupported local spec version {}, expected 1",
+            local.version
+        )));
+    }
+
+    let main_rule_ids: HashSet<&str> = main.rules.iter().map(|rule| rule.id.as_str()).collect();
+    let mut excluded = HashSet::new();
+    for id in &local.exclude {
+        if !excluded.insert(id.as_str()) {
+            anyhow::bail!(RtangoError::InvalidSpec(format!(
+                "duplicate excluded rule id '{}' in local spec",
+                id
+            )));
+        }
+        if !main_rule_ids.contains(id.as_str()) {
+            anyhow::bail!(RtangoError::InvalidSpec(format!(
+                "local spec excludes unknown main rule '{}'",
+                id
+            )));
+        }
+    }
+
+    let mut local_rule_ids = HashSet::new();
+    for rule in &local.rules {
+        if !local_rule_ids.insert(rule.id.as_str()) {
+            anyhow::bail!(RtangoError::InvalidSpec(format!(
+                "duplicate rule id '{}' in local spec",
+                rule.id
+            )));
+        }
+        if excluded.contains(rule.id.as_str()) {
+            anyhow::bail!(RtangoError::InvalidSpec(format!(
+                "local rule '{}' cannot be both excluded and overridden",
+                rule.id
+            )));
+        }
+    }
+
+    if let Some(agents) = local.agents {
+        main.agents = agents;
+    }
+    if let Some(defaults) = local.defaults {
+        if let Some(policy) = defaults.on_target_modified {
+            main.defaults.on_target_modified = policy;
+        }
+        if let Some(gitignore_targets) = defaults.gitignore_targets {
+            main.defaults.gitignore_targets = gitignore_targets;
+        }
+    }
+
+    main.rules
+        .retain(|rule| !excluded.contains(rule.id.as_str()));
+
+    for local_rule in local.rules {
+        if let Some(position) = main.rules.iter().position(|rule| rule.id == local_rule.id) {
+            main.rules[position] = local_rule;
+        } else {
+            main.rules.push(local_rule);
+        }
+    }
+
+    validate_spec(&main)?;
+    Ok(main)
 }
 
 /// Parse a spec from a raw YAML string. Used for loading remote collection specs

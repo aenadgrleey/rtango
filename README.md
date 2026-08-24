@@ -81,6 +81,32 @@ rtango wander --ignore-fetch-failures
 - **Lock** — `.rtango/lock.yaml` records what was written, content hashes, and ownership decisions. Changes to target files detected outside rtango are caught by the `on_target_modified` policy (`fail` / `overwrite` / `skip`).
 - **Managed `.gitignore`** — optionally keep projected targets in a dedicated rtango block. Skill projections are ignored precisely as leaf directories (for example `.pi/skills/reviewer/`), while agent/system projections are ignored as exact files; broad roots like `.pi/` are never ignored.
 
+### Local overrides
+
+An optional `.rtango/spec.local.yaml` overlays the shared `.rtango/spec.yaml`. It is intended for machine- or developer-specific configuration and should normally be added to `.gitignore`.
+
+```yaml
+version: 1
+
+# Replace the main agent list or individual defaults when present.
+agents: [cursor, codex]
+defaults:
+  on_target_modified: overwrite
+
+# Remove rules declared by the main spec from the effective configuration.
+exclude:
+  - team-only-skill
+
+# A matching id replaces the main rule; a new id adds a local-only rule.
+rules:
+  - id: reviewer
+    source: .cursor/skills/reviewer
+    schema_agent: cursor
+    kind: skill
+```
+
+Rule replacement is by exact `id` and keeps the main rule's ordering. Excluded IDs must exist in the main spec, and the same ID cannot be both excluded and overridden. `rtango add` always edits only `.rtango/spec.yaml`; it never copies local overrides into the shared file. Remote collection specs do not load their own `spec.local.yaml` files.
+
 ## Repository signals for agents
 
 If a repo uses rtango, make that obvious so coding agents know they should sync managed skills instead of hand-editing generated copies.

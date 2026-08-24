@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::spec::io::{load_spec, save_spec};
+use crate::spec::io::{load_main_spec, save_spec};
 use crate::spec::{AgentName, GithubSource, Rule, RuleKind, Source};
 
 /// Options forwarded from the `rtango add` CLI.
@@ -76,7 +76,7 @@ pub fn exec(root: &Path, opts: AddOptions) -> anyhow::Result<()> {
         ),
     };
 
-    let mut spec = load_spec(root)?;
+    let mut spec = load_main_spec(root)?;
 
     if spec.rules.iter().any(|r| r.id == opts.id) {
         anyhow::bail!("rule '{}' already exists in spec", opts.id);

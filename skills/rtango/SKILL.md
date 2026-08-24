@@ -7,6 +7,8 @@ name: rtango
 
 This skill teaches AI agents how to use `rtango` to manage and sync skills, agents, and instruction files across multiple coding agents (Claude Code, GitHub Copilot, Cursor, Codex, OpenCode, Pi).
 
+Projects may also contain `.rtango/spec.local.yaml`. It overlays the shared spec for local use: `agents` replaces the main agent list, specified `defaults` fields override main defaults, `exclude` removes main rule IDs, and `rules` replaces matching IDs or adds local-only rules. Do not edit or commit this file unless the user intends to change their local configuration. `rtango add` writes only `.rtango/spec.yaml`.
+
 ## What rtango Does
 
 rtango is a package manager for AI-agent configuration. You author a skill or instruction file **once** (in whichever agent's format you prefer), declare it in `.rtango/spec.yaml`, and rtango renders and syncs copies to every other agent's native layout — rewriting frontmatter, permissions, and target paths automatically.
