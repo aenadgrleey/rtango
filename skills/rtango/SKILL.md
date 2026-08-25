@@ -139,6 +139,21 @@ Codex profile's `AGENTS.md`. Codex user skills currently use the shared
 `~/.agents/skills/` registry unless an explicit rule target has `home`, in
 which case that profile's `skills/` directory is used.
 
+Global registry paths:
+
+| Agent | Skills | Agent files | System file |
+| --- | --- | --- | --- |
+| Claude Code | `~/.claude/skills/` | `~/.claude/agents/<name>.agent.md` | `~/.claude/CLAUDE.md` |
+| Codex | `~/.agents/skills/` | `$CODEX_HOME/agents/<name>.agent.md` | `$CODEX_HOME/AGENTS.md` or existing `AGENTS.override.md` |
+| Copilot CLI | `$COPILOT_HOME/skills/` | `$COPILOT_HOME/agents/<name>.agent.md` | `$COPILOT_HOME/copilot-instructions.md` |
+| Cursor | `~/.cursor/skills/` | `~/.cursor/agents/<name>.md` | unsupported globally |
+| OpenCode | `$XDG_CONFIG_HOME/opencode/skills/` | `$XDG_CONFIG_HOME/opencode/agents/<name>.agent.md` | `$XDG_CONFIG_HOME/opencode/AGENTS.md` |
+| Pi | `~/.pi/agent/skills/` | `~/.pi/agent/agents/<name>.md` | `~/.pi/agent/AGENTS.md` |
+
+Global sync treats an existing untracked target as a conflict; `--force` is
+required to replace it. Existing global targets removed from the spec are
+retained unless `--prune` is passed; modified orphan files are never deleted.
+
 ### `rtango own`
 
 Record or clear a manual ownership decision when multiple rules claim the same target path.

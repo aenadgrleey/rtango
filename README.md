@@ -162,6 +162,23 @@ profiles declarative.
 Cursor User Rules are settings-backed rather than a documented global file, so
 global system rules for `cursor` are rejected; global skills remain supported.
 
+The complete global registry matrix is:
+
+| Agent | Skills | Agent files | System instructions |
+| --- | --- | --- | --- |
+| Claude Code | `~/.claude/skills/` | `~/.claude/agents/<name>.agent.md` | `~/.claude/CLAUDE.md` |
+| Codex | `~/.agents/skills/` | `$CODEX_HOME/agents/<name>.agent.md` | `$CODEX_HOME/AGENTS.md` (or existing `AGENTS.override.md`) |
+| Copilot CLI | `$COPILOT_HOME/skills/` | `$COPILOT_HOME/agents/<name>.agent.md` | `$COPILOT_HOME/copilot-instructions.md` |
+| Cursor | `~/.cursor/skills/` | `~/.cursor/agents/<name>.md` | Not file-backed; rejected |
+| OpenCode | `$XDG_CONFIG_HOME/opencode/skills/` | `$XDG_CONFIG_HOME/opencode/agents/<name>.agent.md` | `$XDG_CONFIG_HOME/opencode/AGENTS.md` |
+| Pi | `~/.pi/agent/skills/` | `~/.pi/agent/agents/<name>.md` | `~/.pi/agent/AGENTS.md` |
+
+The paths above show defaults; `CODEX_HOME`, `COPILOT_HOME`, and
+`XDG_CONFIG_HOME` can redirect the corresponding registries. A rule-level
+`targets[].home` is the declarative way to write to several independent
+profiles in one sync. Global sync treats an existing untracked target as a
+conflict; `--force` is required to replace it. `--adopt` is project-only.
+
 ### Local overrides
 
 An optional `.rtango/spec.local.yaml` overlays the shared `.rtango/spec.yaml`. It is intended for machine- or developer-specific configuration and should normally be added to `.gitignore`.

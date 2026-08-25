@@ -117,6 +117,43 @@ fn global_sync_honors_an_injected_codex_profile_home() {
 }
 
 #[test]
+fn global_sync_uses_spec_agents_and_rule_level_profiles() {
+    let spec_root = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let profile_a = TempDir::new().unwrap();
+    let profile_b = TempDir::new().unwrap();
+    for name in ["default", "profiles"] {
+        let skill_dir = spec_root.path().join(name);
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: {name}\n---\nbody\n"),
+        )
+        .unwrap();
+    }
+    let spec = spec_root.path().join("global.yaml");
+    fs::write(
+        &spec,
+        format!(
+            "version: 1\nagents: [claude-code, codex]\nrules:\n{}  - id: profiles\n    source: profiles\n    schema_agent: claude-code\n    kind: skill\n    targets:\n      - agent: codex\n        home: {}\n      - agent: codex\n        home: {}\n",
+            skill_rule("default", "default"),
+            profile_a.path().display(),
+            profile_b.path().display()
+        ),
+    )
+    .unwrap();
+
+    rtango::cmd::global_sync::exec_at(&spec, home.path(), Vec::new(), None, false, false, false)
+        .unwrap();
+
+    assert!(home.path().join(".claude/skills/default/SKILL.md").exists());
+    assert!(home.path().join(".agents/skills/default/SKILL.md").exists());
+    assert!(profile_a.path().join("skills/profiles/SKILL.md").exists());
+    assert!(profile_b.path().join("skills/profiles/SKILL.md").exists());
+    assert!(!profile_a.path().join("skills/default/SKILL.md").exists());
+}
+
+#[test]
 fn global_sync_uses_lock_for_conflicts_and_force_overwrites() {
     let spec_root = TempDir::new().unwrap();
     let home = TempDir::new().unwrap();
