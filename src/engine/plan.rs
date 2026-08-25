@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::agent::{self, frontmatter::join_frontmatter};
 use crate::spec::{
-    AgentName, Deployment, Lock, OnTargetModified, Ownership, Rule, RuleKind, Source, Spec,
+    AgentName, Deployment, Lock, OnTargetModified, Ownership, Rule, RuleKind, Source, Spec, Target,
 };
 
 use super::fetch::{GithubFetchError, describe_github_source};
@@ -14,10 +14,95 @@ use super::{
     hash_content,
 };
 
+/// User-level directories used by global agent registries.
+///
+/// Keeping these paths in a value object makes global planning independent of
+/// the process environment. The CLI constructs it from the real environment;
+/// callers embedding rtango (and tests) can inject a different profile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GlobalEnvironment {
+    pub home: PathBuf,
+    pub codex_home: PathBuf,
+    pub copilot_home: PathBuf,
+    pub xdg_config_home: PathBuf,
+}
+
+impl GlobalEnvironment {
+    pub fn from_process() -> anyhow::Result<Self> {
+        let home = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("could not determine home directory"))?;
+        Ok(Self {
+            codex_home: std::env::var_os("CODEX_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join(".codex")),
+            copilot_home: std::env::var_os("COPILOT_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join(".copilot")),
+            xdg_config_home: std::env::var_os("XDG_CONFIG_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join(".config")),
+            home,
+        })
+    }
+
+    /// Construct a hermetic profile rooted at `home`, with no process-env
+    /// lookups. This is useful for isolated Codex instances and tests.
+    pub fn for_home(home: &Path) -> Self {
+        Self {
+            codex_home: home.join(".codex"),
+            copilot_home: home.join(".copilot"),
+            xdg_config_home: home.join(".config"),
+            home: home.to_path_buf(),
+        }
+    }
+}
+
+/// `Project` preserves rtango's existing repository layout. `Global` uses
+/// each agent's documented user-level configuration directory and is used by
+/// the standalone `global-sync` command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TargetScope {
+    Project,
+    Global(GlobalEnvironment),
+}
+
 /// Compute the target path for a rendered item based on the target agent.
-fn target_path_for(agent: &AgentName, kind: &ExpandedKind) -> anyhow::Result<PathBuf> {
+fn target_path_for(
+    root: &Path,
+    target: &Target,
+    kind: &ExpandedKind,
+    scope: &TargetScope,
+) -> anyhow::Result<PathBuf> {
+    let agent = &target.agent;
     if let ExpandedKind::System(_) = kind {
-        return system_file_path_for(agent);
+        return system_file_path_for(root, target, scope);
+    }
+    if let TargetScope::Global(environment) = scope {
+        let base = if agent.as_str() == "codex"
+            && matches!(kind, ExpandedKind::Skill(_) | ExpandedKind::SkillAsset(_))
+        {
+            global_shared_skills_root(environment, target.home.as_deref())
+        } else {
+            global_agent_root(root, agent, environment, target.home.as_deref())?
+        };
+        return match kind {
+            ExpandedKind::Skill(skill) => {
+                Ok(base.join("skills").join(&skill.name).join("SKILL.md"))
+            }
+            ExpandedKind::SkillAsset(asset) => Ok(base
+                .join("skills")
+                .join(&asset.skill_name)
+                .join(&asset.relative_path)),
+            ExpandedKind::Agent(agent_file) => {
+                let suffix = if matches!(agent.as_str(), "pi" | "cursor") {
+                    format!("{}.md", agent_file.name)
+                } else {
+                    format!("{}.agent.md", agent_file.name)
+                };
+                Ok(base.join("agents").join(suffix))
+            }
+            ExpandedKind::System(_) => unreachable!("handled above"),
+        };
     }
     let dir = match agent.as_str() {
         "copilot" => ".github",
@@ -60,32 +145,134 @@ fn target_path_for(agent: &AgentName, kind: &ExpandedKind) -> anyhow::Result<Pat
 }
 
 /// Convention path for the per-agent root instruction file.
-fn system_file_path_for(agent: &AgentName) -> anyhow::Result<PathBuf> {
-    Ok(match agent.as_str() {
-        "copilot" => PathBuf::from(".github/copilot-instructions.md"),
-        "cursor" => PathBuf::from("AGENTS.md"),
-        "claude-code" => PathBuf::from("CLAUDE.md"),
-        "codex" => PathBuf::from("AGENTS.md"),
-        "pi" => PathBuf::from("AGENTS.md"),
-        "opencode" => PathBuf::from("AGENTS.md"),
-        "plain" => PathBuf::from("system/AGENTS.md"),
-        other => anyhow::bail!("unknown target agent: {}", other),
-    })
+fn system_file_path_for(
+    root: &Path,
+    target: &Target,
+    scope: &TargetScope,
+) -> anyhow::Result<PathBuf> {
+    let agent = &target.agent;
+    match scope {
+        TargetScope::Project => match agent.as_str() {
+            "copilot" => Ok(PathBuf::from(".github/copilot-instructions.md")),
+            "cursor" => Ok(PathBuf::from("AGENTS.md")),
+            "claude-code" => Ok(PathBuf::from("CLAUDE.md")),
+            "codex" | "pi" | "opencode" => Ok(PathBuf::from("AGENTS.md")),
+            "plain" => Ok(PathBuf::from("system/AGENTS.md")),
+            other => anyhow::bail!("unknown target agent: {other}"),
+        },
+        TargetScope::Global(environment) => match agent.as_str() {
+            "copilot" => Ok(
+                global_agent_root(root, agent, environment, target.home.as_deref())?
+                    .join("copilot-instructions.md"),
+            ),
+            "claude-code" => {
+                Ok(
+                    global_agent_root(root, agent, environment, target.home.as_deref())?
+                        .join("CLAUDE.md"),
+                )
+            }
+            "codex" => {
+                let base = global_agent_root(root, agent, environment, target.home.as_deref())?;
+                let override_file = base.join("AGENTS.override.md");
+                if override_file.is_file() {
+                    Ok(override_file)
+                } else {
+                    Ok(base.join("AGENTS.md"))
+                }
+            }
+            "pi" | "opencode" => {
+                Ok(
+                    global_agent_root(root, agent, environment, target.home.as_deref())?
+                        .join("AGENTS.md"),
+                )
+            }
+            "cursor" => anyhow::bail!(
+                "global system instructions are not file-backed for cursor; use Cursor User Rules in settings"
+            ),
+            "plain" => Ok(PathBuf::from(".rtango/AGENTS.md")),
+            other => anyhow::bail!("unknown target agent: {other}"),
+        },
+    }
+}
+
+fn global_agent_root(
+    root: &Path,
+    agent: &AgentName,
+    environment: &GlobalEnvironment,
+    custom_home: Option<&Path>,
+) -> anyhow::Result<PathBuf> {
+    if let Some(home) = custom_home {
+        return Ok(match agent.as_str() {
+            "codex" | "copilot" => home.to_path_buf(),
+            "opencode" => home.join("opencode"),
+            "cursor" => home.join(".cursor"),
+            "claude-code" => home.join(".claude"),
+            "pi" => home.join(".pi/agent"),
+            "plain" => home.join(".rtango"),
+            other => anyhow::bail!("unknown target agent: {other}"),
+        });
+    }
+    match agent.as_str() {
+        "codex" => Ok(environment.codex_home.clone()),
+        "copilot" => Ok(environment.copilot_home.clone()),
+        "opencode" => Ok(environment.xdg_config_home.join("opencode")),
+        "cursor" => Ok(root.join(".cursor")),
+        "claude-code" => Ok(root.join(".claude")),
+        "pi" => Ok(root.join(".pi/agent")),
+        "plain" => Ok(root.join(".rtango")),
+        other => anyhow::bail!("unknown target agent: {other}"),
+    }
+}
+
+fn global_shared_skills_root(
+    environment: &GlobalEnvironment,
+    custom_home: Option<&Path>,
+) -> PathBuf {
+    custom_home
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| environment.home.join(".agents"))
+}
+
+/// Resolve a plan path, which is relative for project targets and absolute
+/// for global targets redirected outside `$HOME` by an agent environment
+/// variable.
+pub fn resolve_target_path(root: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    }
 }
 
 /// Render an expanded item for a specific target agent.
 pub fn render_for_agent(
+    root: &Path,
+    item: &ExpandedItem,
+    schema_agent: &AgentName,
+    target_agent: &AgentName,
+) -> anyhow::Result<RenderedTarget> {
+    render_for_agent_in_scope(
+        root,
+        item,
+        schema_agent,
+        &Target::agent(target_agent.0.clone()),
+        &TargetScope::Project,
+    )
+}
+
+pub fn render_for_agent_in_scope(
     _root: &Path,
     item: &ExpandedItem,
     _schema_agent: &AgentName,
-    target_agent: &AgentName,
+    target: &Target,
+    scope: &TargetScope,
 ) -> anyhow::Result<RenderedTarget> {
     let content = match &item.kind {
         ExpandedKind::System(s) => s.body.clone(),
         ExpandedKind::SkillAsset(asset) => asset.content.clone(),
         ExpandedKind::Skill(_) | ExpandedKind::Agent(_) => {
-            let writer = agent::frontmatter_writer(target_agent)
-                .ok_or_else(|| anyhow::anyhow!("unknown target agent: {}", target_agent))?;
+            let writer = agent::frontmatter_writer(&target.agent)
+                .ok_or_else(|| anyhow::anyhow!("unknown target agent: {}", target.agent))?;
             let (fm, body) = match &item.kind {
                 ExpandedKind::Skill(s) => (&s.front_matter, &s.body),
                 ExpandedKind::Agent(a) => (&a.front_matter, &a.body),
@@ -102,12 +289,12 @@ pub fn render_for_agent(
         }
     };
 
-    let target_path = target_path_for(target_agent, &item.kind)?;
+    let target_path = target_path_for(_root, target, &item.kind, scope)?;
     let content_hash = hash_content(&content);
 
     Ok(RenderedTarget {
         rule_id: item.rule_id.clone(),
-        agent: target_agent.clone(),
+        agent: target.agent.clone(),
         source: item.source.clone(),
         source_hash: item.source_hash.clone(),
         target_path,
@@ -143,6 +330,16 @@ fn find_reparent_candidate<'a>(
         .find(|d| d.agent == *agent && d.content == target_path)
 }
 
+fn rule_targets(spec: &Spec, rule: &Rule) -> Vec<Target> {
+    rule.targets.clone().unwrap_or_else(|| {
+        spec.agents
+            .iter()
+            .cloned()
+            .map(|agent| Target { agent, home: None })
+            .collect()
+    })
+}
+
 struct ExpandedRule {
     rule_index: usize,
     items: Vec<ExpandedItem>,
@@ -168,6 +365,33 @@ pub fn compute_plan(
     Ok(compute_plan_with_fetch_failures(root, spec, lock, force, inject_builtins, false)?.plan)
 }
 
+/// Compute a plan with separate source and target roots.
+///
+/// This is the domain entry point for stateless/global projections: sources
+/// are expanded relative to `source_root`, while rendered files are diffed
+/// and written relative to `target_root`.
+pub fn compute_plan_in_scope(
+    target_root: &Path,
+    source_root: &Path,
+    spec: &Spec,
+    lock: &Lock,
+    force: bool,
+    inject_builtins: bool,
+    scope: TargetScope,
+) -> anyhow::Result<Plan> {
+    Ok(compute_plan_with_fetch_failures_in_scope(
+        target_root,
+        source_root,
+        spec,
+        lock,
+        force,
+        inject_builtins,
+        false,
+        scope,
+    )?
+    .plan)
+}
+
 pub fn compute_plan_with_fetch_failures(
     root: &Path,
     spec: &Spec,
@@ -176,13 +400,38 @@ pub fn compute_plan_with_fetch_failures(
     inject_builtins: bool,
     ignore_fetch_failures: bool,
 ) -> anyhow::Result<PlanReport> {
-    let expansion = expand_rules(root, spec, ignore_fetch_failures)?;
-    let plan = compute_plan_from_expanded_rules(
+    compute_plan_with_fetch_failures_in_scope(
+        root,
         root,
         spec,
         lock,
         force,
         inject_builtins,
+        ignore_fetch_failures,
+        TargetScope::Project,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compute_plan_with_fetch_failures_in_scope(
+    target_root: &Path,
+    source_root: &Path,
+    spec: &Spec,
+    lock: &Lock,
+    force: bool,
+    inject_builtins: bool,
+    ignore_fetch_failures: bool,
+    scope: TargetScope,
+) -> anyhow::Result<PlanReport> {
+    let expansion = expand_rules(source_root, spec, ignore_fetch_failures)?;
+    let plan = compute_plan_from_expanded_rules(
+        target_root,
+        source_root,
+        spec,
+        lock,
+        force,
+        inject_builtins,
+        &scope,
         &expansion.expanded_rules,
     )?;
     Ok(PlanReport {
@@ -191,17 +440,21 @@ pub fn compute_plan_with_fetch_failures(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compute_plan_from_expanded_rules(
-    root: &Path,
+    target_root: &Path,
+    source_root: &Path,
     spec: &Spec,
     lock: &Lock,
     force: bool,
     inject_builtins: bool,
+    scope: &TargetScope,
     expanded_rules: &[ExpandedRule],
 ) -> anyhow::Result<Plan> {
     let default_policy = spec.defaults.on_target_modified;
     let mut items = Vec::new();
-    let candidates = collect_candidates_from_expanded_rules(root, spec, expanded_rules)?;
+    let candidates =
+        collect_candidates_from_expanded_rules(target_root, spec, scope, expanded_rules)?;
 
     // Phase 2: resolve ownership for every touched path.
     let owners = resolve_owners(spec, &candidates, lock)?;
@@ -241,9 +494,15 @@ fn compute_plan_from_expanded_rules(
                 continue;
             }
 
-            for target_agent in &spec.agents {
-                let rendered = render_for_agent(root, exp_item, &rule.schema_agent, target_agent)?;
-                let abs_target = root.join(&rendered.target_path);
+            for target in rule_targets(spec, rule) {
+                let rendered = render_for_agent_in_scope(
+                    target_root,
+                    exp_item,
+                    &rule.schema_agent,
+                    &target,
+                    scope,
+                )?;
+                let abs_target = resolve_target_path(target_root, &rendered.target_path);
 
                 if source_file == &abs_target {
                     continue;
@@ -252,11 +511,13 @@ fn compute_plan_from_expanded_rules(
                     continue;
                 }
 
-                seen.insert((
+                if !seen.insert((
                     rendered.rule_id.clone(),
                     rendered.agent.0.clone(),
                     rendered.target_path.clone(),
-                ));
+                )) {
+                    continue;
+                }
                 produced.insert(abs_target.clone());
 
                 let disk_content = fs::read_to_string(&abs_target).ok();
@@ -316,7 +577,7 @@ fn compute_plan_from_expanded_rules(
         if seen.contains(&key) {
             continue;
         }
-        let abs = root.join(&dep.content);
+        let abs = resolve_target_path(target_root, &dep.content);
         if produced.contains(&abs) || owners.contains_key(&abs) {
             continue;
         }
@@ -331,19 +592,19 @@ fn compute_plan_from_expanded_rules(
         });
     }
 
-    if inject_builtins {
+    if inject_builtins && matches!(scope, TargetScope::Project) {
         let user_source_dirs: Vec<PathBuf> = spec
             .rules
             .iter()
             .filter_map(|r| match &r.source {
-                Source::Local(p) => Some(root.join(p)),
+                Source::Local(p) => Some(source_root.join(p)),
                 _ => None,
             })
             .filter(|p| p.is_dir())
             .collect();
 
-        for rendered in builtin::builtin_rendered_targets(root, &spec.agents) {
-            let abs_target = root.join(&rendered.target_path);
+        for rendered in builtin::builtin_rendered_targets(target_root, &spec.agents) {
+            let abs_target = resolve_target_path(target_root, &rendered.target_path);
             if produced.contains(&abs_target) {
                 continue;
             }
@@ -519,8 +780,31 @@ pub fn find_ambiguities_with_fetch_failures(
     lock: &Lock,
     ignore_fetch_failures: bool,
 ) -> anyhow::Result<AmbiguityReport> {
-    let expansion = expand_rules(root, spec, ignore_fetch_failures)?;
-    let candidates = collect_candidates_from_expanded_rules(root, spec, &expansion.expanded_rules)?;
+    find_ambiguities_with_fetch_failures_in_scope(
+        root,
+        root,
+        spec,
+        lock,
+        ignore_fetch_failures,
+        TargetScope::Project,
+    )
+}
+
+pub fn find_ambiguities_with_fetch_failures_in_scope(
+    target_root: &Path,
+    source_root: &Path,
+    spec: &Spec,
+    lock: &Lock,
+    ignore_fetch_failures: bool,
+    scope: TargetScope,
+) -> anyhow::Result<AmbiguityReport> {
+    let expansion = expand_rules(source_root, spec, ignore_fetch_failures)?;
+    let candidates = collect_candidates_from_expanded_rules(
+        target_root,
+        spec,
+        &scope,
+        &expansion.expanded_rules,
+    )?;
     let rule_kinds: HashMap<&str, &RuleKind> = spec
         .rules
         .iter()
@@ -546,8 +830,9 @@ pub fn find_ambiguities_with_fetch_failures(
 }
 
 fn collect_candidates_from_expanded_rules(
-    root: &Path,
+    target_root: &Path,
     spec: &Spec,
+    scope: &TargetScope,
     expanded_rules: &[ExpandedRule],
 ) -> anyhow::Result<HashMap<PathBuf, HashSet<String>>> {
     let mut candidates: HashMap<PathBuf, HashSet<String>> = HashMap::new();
@@ -564,8 +849,11 @@ fn collect_candidates_from_expanded_rules(
                 .entry(source_file)
                 .or_default()
                 .insert(rule.id.clone());
-            for target_agent in &spec.agents {
-                let tp = root.join(target_path_for(target_agent, &item.kind)?);
+            for target in rule_targets(spec, rule) {
+                let tp = resolve_target_path(
+                    target_root,
+                    &target_path_for(target_root, &target, &item.kind, scope)?,
+                );
                 candidates.entry(tp).or_default().insert(rule.id.clone());
             }
         }
@@ -714,6 +1002,7 @@ mod tests {
             id: "local".into(),
             source: Source::Local(PathBuf::from(".github/skills")),
             schema_agent: AgentName::new("copilot"),
+            targets: None,
             on_target_modified: None,
             kind: RuleKind::skill_set(),
         };
@@ -725,6 +1014,7 @@ mod tests {
                 path: "skills".into(),
             }),
             schema_agent: AgentName::new("copilot"),
+            targets: None,
             on_target_modified: None,
             kind: RuleKind::skill_set(),
         };
@@ -742,10 +1032,12 @@ mod tests {
 
         let plan = compute_plan_from_expanded_rules(
             root,
+            root,
             &spec,
             &empty_lock(),
             false,
             false,
+            &TargetScope::Project,
             &expanded_rules,
         )
         .unwrap();

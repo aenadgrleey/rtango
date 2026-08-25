@@ -1,10 +1,13 @@
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use super::source::Source;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Spec {
     pub version: u32,
+    #[serde(default)]
     pub agents: Vec<AgentName>,
     #[serde(default)]
     pub defaults: Defaults,
@@ -26,13 +29,32 @@ impl AgentName {
     }
 }
 
+/// A target registry for one rule. `home` is an optional agent-specific
+/// profile root, primarily useful for running several isolated Codex
+/// instances from one global spec.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Target {
+    pub agent: AgentName,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home: Option<PathBuf>,
+}
+
+impl Target {
+    pub fn agent(agent: impl Into<String>) -> Self {
+        Self {
+            agent: AgentName::new(agent),
+            home: None,
+        }
+    }
+}
+
 impl std::fmt::Display for AgentName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Defaults {
     #[serde(default)]
     pub on_target_modified: OnTargetModified,
@@ -49,11 +71,14 @@ pub enum OnTargetModified {
     Skip,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rule {
     pub id: String,
     pub source: Source,
     pub schema_agent: AgentName,
+    /// Optional per-rule target override. When absent, `Spec.agents` applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub targets: Option<Vec<Target>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_target_modified: Option<OnTargetModified>,
     #[serde(flatten)]

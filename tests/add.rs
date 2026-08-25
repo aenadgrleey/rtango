@@ -26,6 +26,7 @@ fn seeded_spec() -> Spec {
         id: "existing".into(),
         source: Source::Local(PathBuf::from(".claude/skills/")),
         schema_agent: AgentName::new("claude-code"),
+        targets: None,
         on_target_modified: None,
         kind: RuleKind::skill_set(),
     });

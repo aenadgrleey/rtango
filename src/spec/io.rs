@@ -74,6 +74,41 @@ pub fn load_main_spec(root: &Path) -> anyhow::Result<Spec> {
     Ok(spec)
 }
 
+/// Load and validate a standalone spec from an explicit path.
+///
+/// Unlike [`load_spec`], this deliberately does not look for a sibling
+/// `spec.local.yaml`: a global sync is controlled entirely by the file named
+/// by the command line and must not inherit project-local overrides.
+pub fn load_spec_file(path: &Path) -> anyhow::Result<Spec> {
+    let content =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let spec: Spec = serde_yml::from_str(&content)
+        .with_context(|| format!("failed to parse {}", path.display()))?;
+    validate_standalone_spec(&spec)?;
+    Ok(spec)
+}
+
+/// Validate a standalone registry spec. Its target list may be empty because
+/// `global-sync` receives authoritative targets as command arguments.
+pub fn validate_standalone_spec(spec: &Spec) -> anyhow::Result<()> {
+    if spec.version != 1 {
+        anyhow::bail!(RtangoError::InvalidSpec(format!(
+            "unsupported version {}, expected 1",
+            spec.version
+        )));
+    }
+    let mut seen = HashSet::new();
+    for rule in &spec.rules {
+        if !seen.insert(&rule.id) {
+            anyhow::bail!(RtangoError::InvalidSpec(format!(
+                "duplicate rule id '{}'",
+                rule.id
+            )));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Deserialize)]
 struct LocalSpec {
     version: u32,
@@ -197,20 +232,26 @@ pub fn validate_spec(spec: &Spec) -> anyhow::Result<()> {
 }
 
 pub fn save_spec(root: &Path, spec: &Spec) -> anyhow::Result<()> {
-    let path = spec_path(root);
+    save_spec_file(&spec_path(root), spec)
+}
+
+pub fn save_spec_file(path: &Path, spec: &Spec) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;
     }
     let yaml = serde_yml::to_string(spec)?;
-    fs::write(&path, yaml).with_context(|| format!("failed to write {}", path.display()))?;
+    fs::write(path, yaml).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
 }
 
 pub fn load_lock(root: &Path) -> anyhow::Result<Lock> {
-    let path = lock_path(root);
+    load_lock_file(&lock_path(root))
+}
+
+pub fn load_lock_file(path: &Path) -> anyhow::Result<Lock> {
     let content =
-        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
     let lock: Lock = serde_yml::from_str(&content)
         .with_context(|| format!("failed to parse {}", path.display()))?;
     Ok(lock)
@@ -218,6 +259,10 @@ pub fn load_lock(root: &Path) -> anyhow::Result<Lock> {
 
 pub fn load_lock_or_empty(root: &Path) -> anyhow::Result<Lock> {
     let path = lock_path(root);
+    load_lock_or_empty_file(&path)
+}
+
+pub fn load_lock_or_empty_file(path: &Path) -> anyhow::Result<Lock> {
     if !path.exists() {
         return Ok(Lock {
             version: 1,
@@ -226,17 +271,20 @@ pub fn load_lock_or_empty(root: &Path) -> anyhow::Result<Lock> {
             deployments: vec![],
         });
     }
-    load_lock(root)
+    load_lock_file(path)
 }
 
 pub fn save_lock(root: &Path, lock: &Lock) -> anyhow::Result<()> {
-    let path = lock_path(root);
+    save_lock_file(&lock_path(root), lock)
+}
+
+pub fn save_lock_file(path: &Path, lock: &Lock) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;
     }
     let yaml = serde_yml::to_string(lock)?;
-    fs::write(&path, yaml).with_context(|| format!("failed to write {}", path.display()))?;
+    fs::write(path, yaml).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
 }
 

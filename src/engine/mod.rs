@@ -45,7 +45,7 @@ pub struct PlannedDeployment {
 }
 
 /// The full sync plan: what the engine computed after expansion + diffing.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Plan {
     pub items: Vec<PlannedDeployment>,
     /// Ownership decisions for contested paths, carried forward into the lock

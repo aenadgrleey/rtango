@@ -137,6 +137,7 @@ fn local_collection_round_trips_through_yaml() {
             id: "remote-skills".into(),
             source: Source::Local(PathBuf::from("../personal-ai-tools")),
             schema_agent: AgentName::new("claude-code"),
+            targets: None,
             on_target_modified: None,
             kind: RuleKind::Collection {
                 include: vec!["pi-android-sandbox".into()],
@@ -175,6 +176,7 @@ fn github_collection_round_trips_through_yaml() {
                 path: String::new(),
             }),
             schema_agent: AgentName::new("claude-code"),
+            targets: None,
             on_target_modified: None,
             kind: RuleKind::Collection {
                 include: vec!["pi-android-sandbox".into()],
@@ -211,6 +213,7 @@ fn collection_schema_override_round_trips_through_yaml() {
             id: "remote-skills".into(),
             source: Source::Local(PathBuf::from("../other-repo")),
             schema_agent: AgentName::new("claude-code"),
+            targets: None,
             on_target_modified: None,
             kind: RuleKind::Collection {
                 include: vec![],

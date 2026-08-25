@@ -58,6 +58,7 @@ fn skill_set_rule(id: &str, path: &str, schema: &str) -> Rule {
         id: id.to_string(),
         source: Source::Local(PathBuf::from(path)),
         schema_agent: AgentName::new(schema),
+        targets: None,
         on_target_modified: None,
         kind: RuleKind::skill_set(),
     }
@@ -68,6 +69,7 @@ fn agent_set_rule(id: &str, path: &str, schema: &str) -> Rule {
         id: id.to_string(),
         source: Source::Local(PathBuf::from(path)),
         schema_agent: AgentName::new(schema),
+        targets: None,
         on_target_modified: None,
         kind: RuleKind::agent_set(),
     }
@@ -78,6 +80,7 @@ fn single_skill_rule(id: &str, path: &str, schema: &str) -> Rule {
         id: id.to_string(),
         source: Source::Local(PathBuf::from(path)),
         schema_agent: AgentName::new(schema),
+        targets: None,
         on_target_modified: None,
         kind: RuleKind::skill(),
     }
@@ -88,6 +91,7 @@ fn single_agent_rule(id: &str, path: &str, schema: &str) -> Rule {
         id: id.to_string(),
         source: Source::Local(PathBuf::from(path)),
         schema_agent: AgentName::new(schema),
+        targets: None,
         on_target_modified: None,
         kind: RuleKind::agent(),
     }
@@ -365,6 +369,7 @@ fn expand_skill_set_honors_include_filter() {
         id: "picked".into(),
         source: Source::Local(PathBuf::from(".github/skills")),
         schema_agent: AgentName::new("copilot"),
+        targets: None,
         on_target_modified: None,
         kind: RuleKind::SkillSet {
             include: vec!["alpha".into(), "gamma".into()],
@@ -398,6 +403,7 @@ fn expand_agent_set_honors_exclude_filter() {
         id: "mostly".into(),
         source: Source::Local(PathBuf::from(".github/agents")),
         schema_agent: AgentName::new("copilot"),
+        targets: None,
         on_target_modified: None,
         kind: RuleKind::AgentSet {
             include: vec![],
@@ -431,6 +437,7 @@ fn expand_single_skill_applies_overrides() {
         id: "s1".into(),
         source: Source::Local(PathBuf::from(".github/skills/my-skill")),
         schema_agent: AgentName::new("copilot"),
+        targets: None,
         on_target_modified: None,
         kind: RuleKind::Skill {
             name: Some("New Name".into()),

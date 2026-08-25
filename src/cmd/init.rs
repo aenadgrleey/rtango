@@ -40,6 +40,7 @@ pub fn exec(
                 id: source.id.clone(),
                 source: Source::Local(source.path.clone()),
                 schema_agent: agent.name.clone(),
+                targets: None,
                 on_target_modified: None,
                 kind: match source.kind {
                     SourceKind::SkillSet => RuleKind::skill_set(),

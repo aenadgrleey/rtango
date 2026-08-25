@@ -17,6 +17,7 @@ fn skill_set_rule(id: &str, path: &str, schema: &str) -> Rule {
         id: id.to_string(),
         source: Source::Local(PathBuf::from(path)),
         schema_agent: AgentName::new(schema),
+        targets: None,
         on_target_modified: None,
         kind: RuleKind::skill_set(),
     }

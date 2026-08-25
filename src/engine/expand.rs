@@ -112,6 +112,7 @@ fn expand_collection(
             id: format!("{}/{}", rule.id, remote_rule.id),
             source: remote_rule.source.clone(),
             schema_agent: effective_schema,
+            targets: remote_rule.targets.clone(),
             on_target_modified: rule.on_target_modified,
             kind: remote_rule.kind.clone(),
         };

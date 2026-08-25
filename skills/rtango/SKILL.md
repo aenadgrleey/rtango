@@ -102,6 +102,43 @@ rtango sync --rule my-skill  # only sync one rule
 
 **`--force`** overwrites files even when the `on_target_modified` policy is `fail`. Use with care — it discards any local edits made since the last sync.
 
+### `rtango global-sync`
+
+Use the user-level registry command with the canonical `~/.rtango/spec.yaml`:
+
+```sh
+rtango global-sync
+# optional spec override and compatibility target override:
+rtango global-sync --spec ~/configs/team-spec.yaml --agent codex
+```
+
+Local sources resolve relative to the spec file. The command writes a sidecar
+`<spec>.lock.yaml`, never updates `.gitignore`. Ordinary defaults and rule
+options remain active; only project target paths, ownership entries, and
+built-in skills are ignored. `spec.agents` is the default target set, while a
+rule can declare its own `targets` list.
+
+Add editable global sources without a path:
+
+```sh
+rtango add --global reviewer --skill --target codex=~/.codex/work
+rtango add --global planner --agent --target codex=~/.codex/work
+```
+
+These scaffold files below `~/.rtango/sources/`. Use `--local` or `--repo` for
+an existing source. `--target AGENT=HOME` can be repeated for multiple Codex
+profiles.
+
+Global skills are supported for Claude Code, Codex (via `~/.agents/skills`), Copilot CLI, Cursor,
+OpenCode, and Pi. Global system files are supported for Claude Code, Codex,
+Copilot CLI, OpenCode, and Pi. Cursor User Rules are settings-backed and are
+rejected when a `kind: system` rule targets Cursor.
+The command honors `CODEX_HOME`, `COPILOT_HOME`, and `XDG_CONFIG_HOME`; for
+example, prefix the command with `CODEX_HOME=/path/to/profile` to sync that
+Codex profile's `AGENTS.md`. Codex user skills currently use the shared
+`~/.agents/skills/` registry unless an explicit rule target has `home`, in
+which case that profile's `skills/` directory is used.
+
 ### `rtango own`
 
 Record or clear a manual ownership decision when multiple rules claim the same target path.

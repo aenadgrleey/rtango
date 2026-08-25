@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::spec::{Deployment, Lock};
 
-use super::{DeploymentStatus, Plan, builtin};
+use super::{DeploymentStatus, Plan, builtin, resolve_target_path};
 
 /// Execute a sync plan: write target files and return the updated lock.
 ///
@@ -38,7 +38,7 @@ pub fn execute_plan(
     for item in &plan.items {
         match &item.status {
             DeploymentStatus::Create | DeploymentStatus::Update => {
-                let target = root.join(&item.target_path);
+                let target = resolve_target_path(root, &item.target_path);
                 if !check {
                     if let Some(parent) = target.parent() {
                         fs::create_dir_all(parent)?;
@@ -72,7 +72,7 @@ pub fn execute_plan(
                 }
             }
             DeploymentStatus::Orphan => {
-                let target = root.join(&item.target_path);
+                let target = resolve_target_path(root, &item.target_path);
                 if !check && target.exists() {
                     fs::remove_file(&target)?;
                 }

@@ -1,14 +1,15 @@
 use std::path::{Path, PathBuf};
 
-use crate::spec::io::{load_main_spec, save_spec};
-use crate::spec::{AgentName, GithubSource, Rule, RuleKind, Source};
+use crate::cmd::global_sync::default_spec_path;
+use crate::spec::io::{load_main_spec, load_spec_file, save_spec, save_spec_file};
+use crate::spec::{AgentName, GithubSource, Rule, RuleKind, Source, Spec, Target};
 
 /// Options forwarded from the `rtango add` CLI.
 ///
 /// Exactly one of `local` / `repo` must be set (source); exactly one of
 /// `skill` / `agent` / `skill_set` / `agent_set` / `system` / `collection_kind`
 /// must be set (kind).
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct AddOptions {
     pub id: String,
     pub local: Option<PathBuf>,
@@ -29,13 +30,93 @@ pub struct AddOptions {
 
 /// Append a new rule to `.rtango/spec.yaml`.
 pub fn exec(root: &Path, opts: AddOptions) -> anyhow::Result<()> {
+    let mut spec = load_main_spec(root)?;
+    if spec.rules.iter().any(|rule| rule.id == opts.id) {
+        anyhow::bail!("rule '{}' already exists in spec", opts.id);
+    }
+    spec.rules.push(build_rule(&opts, &spec, None, &[])?);
+
+    save_spec(root, &spec)?;
+    println!("added rule '{}'", opts.id);
+    Ok(())
+}
+
+/// Add a single skill or agent to the user's global registry spec. If no
+/// source is supplied, a native-free editable scaffold is created beside the
+/// spec so the command remains useful from an empty home directory.
+pub fn exec_global(_root: &Path, opts: AddOptions, target_args: Vec<String>) -> anyhow::Result<()> {
+    let home =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("could not determine home directory"))?;
+    exec_global_at(&home, opts, target_args)
+}
+
+pub fn exec_global_at(
+    home: &Path,
+    mut opts: AddOptions,
+    target_args: Vec<String>,
+) -> anyhow::Result<()> {
+    let path = default_spec_path(home);
+    let mut spec = if path.exists() {
+        load_spec_file(&path)?
+    } else {
+        Spec {
+            version: 1,
+            agents: Vec::new(),
+            defaults: Default::default(),
+            rules: Vec::new(),
+        }
+    };
+    if spec.rules.iter().any(|rule| rule.id == opts.id) {
+        anyhow::bail!("rule '{}' already exists in global spec", opts.id);
+    }
+
+    let targets = parse_targets(&target_args, home)?;
+    scaffold_global_source(home, &mut opts)?;
+    let rule = build_rule(&opts, &spec, Some(home), &targets)?;
+    if spec.agents.is_empty() && !targets.is_empty() {
+        spec.agents = targets.iter().map(|target| target.agent.clone()).collect();
+        spec.agents.sort_by(|a, b| a.0.cmp(&b.0));
+        spec.agents.dedup();
+    }
+    spec.rules.push(rule);
+    save_spec_file(&path, &spec)?;
+    println!("added rule '{}' to {}", opts.id, path.display());
+    Ok(())
+}
+
+fn build_rule(
+    opts: &AddOptions,
+    spec: &Spec,
+    global_home: Option<&Path>,
+    targets: &[Target],
+) -> anyhow::Result<Rule> {
     let source = match (opts.local.as_ref(), opts.repo.as_ref()) {
         (Some(_), Some(_)) => anyhow::bail!("pass only one of --local/-l or --repo/-r"),
-        (Some(p), None) => Source::Local(p.clone()),
-        (None, Some(spec)) => Source::Github(parse_repo_spec(spec)?),
-        (None, None) => anyhow::bail!("source required: pass --local/-l PATH or --repo/-r SPEC"),
+        (Some(p), None) => {
+            let path = if global_home.is_some() {
+                if p.is_absolute() {
+                    p.clone()
+                } else {
+                    std::env::current_dir()?.join(p)
+                }
+            } else {
+                p.clone()
+            };
+            if let Some(home) = global_home {
+                let registry_root = home.join(".rtango");
+                path.strip_prefix(&registry_root)
+                    .map(PathBuf::from)
+                    .map(Source::Local)
+                    .unwrap_or(Source::Local(path))
+            } else {
+                Source::Local(path)
+            }
+        }
+        (None, Some(repo)) => Source::Github(parse_repo_spec(repo)?),
+        (None, None) => anyhow::bail!(
+            "source required: pass --local/-l PATH, --repo/-r SPEC, or use global scaffold mode"
+        ),
     };
-
     let kind = match (
         opts.skill,
         opts.agent,
@@ -45,27 +126,27 @@ pub fn exec(root: &Path, opts: AddOptions) -> anyhow::Result<()> {
         opts.collection_kind,
     ) {
         (true, false, false, false, false, false) => RuleKind::Skill {
-            name: opts.name,
-            description: opts.description,
-            allowed_tools: opts.allowed_tools,
+            name: opts.name.clone(),
+            description: opts.description.clone(),
+            allowed_tools: opts.allowed_tools.clone(),
         },
         (false, true, false, false, false, false) => RuleKind::Agent {
-            name: opts.name,
-            description: opts.description,
-            allowed_tools: opts.allowed_tools,
+            name: opts.name.clone(),
+            description: opts.description.clone(),
+            allowed_tools: opts.allowed_tools.clone(),
         },
         (false, false, true, false, false, false) => RuleKind::SkillSet {
-            include: opts.include,
-            exclude: opts.exclude,
+            include: opts.include.clone(),
+            exclude: opts.exclude.clone(),
         },
         (false, false, false, true, false, false) => RuleKind::AgentSet {
-            include: opts.include,
-            exclude: opts.exclude,
+            include: opts.include.clone(),
+            exclude: opts.exclude.clone(),
         },
         (false, false, false, false, true, false) => RuleKind::System,
         (false, false, false, false, false, true) => RuleKind::Collection {
-            include: opts.include,
-            exclude: opts.exclude,
+            include: opts.include.clone(),
+            exclude: opts.exclude.clone(),
             schema_override: opts.schema.as_ref().map(AgentName::new),
         },
         (false, false, false, false, false, false) => anyhow::bail!(
@@ -75,58 +156,91 @@ pub fn exec(root: &Path, opts: AddOptions) -> anyhow::Result<()> {
             "pass only one kind of --skill, --agent, --skill-set/--ss, --agent-set/--as, --system, or --collection-kind/--col"
         ),
     };
-
-    let mut spec = load_main_spec(root)?;
-
-    if spec.rules.iter().any(|r| r.id == opts.id) {
-        anyhow::bail!("rule '{}' already exists in spec", opts.id);
-    }
-
-    // For Collection rules the schema_agent override lives inside the kind.
-    // The top-level schema_agent field is still required — use the first
-    // declared agent as a placeholder (it is never consulted for collections).
-    let schema = if opts.collection_kind {
-        match opts.schema {
-            Some(ref name) => {
-                let name = AgentName::new(name);
-                if !spec.agents.contains(&name) {
-                    anyhow::bail!("agent '{}' is not declared in spec.agents", name);
-                }
-                name
-            }
-            None => match spec.agents.as_slice() {
-                [only] => only.clone(),
-                [] => AgentName::new("plain"),
-                _ => spec.agents[0].clone(),
-            },
-        }
-    } else {
-        match opts.schema {
-            Some(name) => {
-                let name = AgentName::new(name);
-                if !spec.agents.contains(&name) {
-                    anyhow::bail!("agent '{}' is not declared in spec.agents", name);
-                }
-                name
-            }
-            None => match spec.agents.as_slice() {
-                [only] => only.clone(),
-                [] => anyhow::bail!("spec has no agents; cannot infer schema_agent"),
-                _ => anyhow::bail!("spec has multiple agents; specify one with --schema/-g"),
-            },
-        }
+    let schema = match opts.schema.as_deref() {
+        Some(name) => AgentName::new(name),
+        None if let Some(target) = targets.first() => target.agent.clone(),
+        None if spec.agents.len() == 1 => spec.agents[0].clone(),
+        None if global_home.is_some() => AgentName::new("plain"),
+        None if opts.collection_kind => spec
+            .agents
+            .first()
+            .cloned()
+            .unwrap_or_else(|| AgentName::new("plain")),
+        None => anyhow::bail!("spec has multiple agents; specify one with --schema/-g"),
     };
-
-    spec.rules.push(Rule {
+    if global_home.is_none() && !spec.agents.contains(&schema) {
+        anyhow::bail!("agent '{}' is not declared in spec.agents", schema);
+    }
+    Ok(Rule {
         id: opts.id.clone(),
         source,
         schema_agent: schema,
+        targets: (!targets.is_empty()).then(|| targets.to_vec()),
         on_target_modified: None,
         kind,
-    });
+    })
+}
 
-    save_spec(root, &spec)?;
-    println!("added rule '{}'", opts.id);
+fn parse_targets(values: &[String], home: &Path) -> anyhow::Result<Vec<Target>> {
+    values
+        .iter()
+        .map(|value| {
+            let (agent, path) = value
+                .split_once('=')
+                .map_or((value.as_str(), None), |(agent, path)| (agent, Some(path)));
+            if agent.is_empty() {
+                anyhow::bail!("target agent cannot be empty");
+            }
+            let home_path = path.map(|path| {
+                let path = PathBuf::from(path);
+                if path == Path::new("~") {
+                    home.to_path_buf()
+                } else if let Ok(relative) = path.strip_prefix("~/") {
+                    home.join(relative)
+                } else {
+                    path
+                }
+            });
+            Ok(Target {
+                agent: AgentName::new(agent),
+                home: home_path,
+            })
+        })
+        .collect()
+}
+
+fn scaffold_global_source(home: &Path, opts: &mut AddOptions) -> anyhow::Result<()> {
+    if opts.local.is_some() || opts.repo.is_some() || (!opts.skill && !opts.agent) {
+        return Ok(());
+    }
+    let (directory, filename, body): (&str, String, String) = if opts.skill {
+        (
+            "skills",
+            "SKILL.md".into(),
+            format!(
+                "---\nname: {}\ndescription: {}\n---\n\n",
+                opts.id,
+                opts.description.as_deref().unwrap_or("")
+            ),
+        )
+    } else {
+        ("agents", format!("{}.agent.md", opts.id), String::new())
+    };
+    let relative = PathBuf::from("sources").join(directory).join(&opts.id);
+    let path = home.join(".rtango").join(&relative).join(filename);
+    if path.exists() {
+        anyhow::bail!("refusing to overwrite existing scaffold {}", path.display());
+    }
+    std::fs::create_dir_all(path.parent().unwrap())?;
+    std::fs::write(&path, body)?;
+    opts.local = Some(if opts.skill {
+        path.parent().unwrap().to_path_buf()
+    } else {
+        path
+    });
+    if opts.schema.is_none() {
+        opts.schema = Some("plain".into());
+    }
     Ok(())
 }
 

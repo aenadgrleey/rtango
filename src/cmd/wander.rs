@@ -54,6 +54,7 @@ pub fn exec_with_options(
                 id: source.id.clone(),
                 source: Source::Local(source.path.clone()),
                 schema_agent: a.name.clone(),
+                targets: None,
                 on_target_modified: None,
                 kind: match source.kind {
                     SourceKind::SkillSet => RuleKind::skill_set(),

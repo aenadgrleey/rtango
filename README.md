@@ -46,6 +46,9 @@ rtango status
 
 # write files, update the lock
 rtango sync
+
+# sync the default user-level registry spec
+rtango global-sync
 ```
 
 ## GitHub auth and fetch failures
@@ -69,6 +72,7 @@ rtango wander --ignore-fetch-failures
 | -------- | ------- |
 | `init`   | Detect installed agents and bootstrap `.rtango/spec.yaml` + `.rtango/lock.yaml`. `--gitignore-targets` adds a managed `.gitignore` block for generated targets. |
 | `sync`   | Fetch sources, render per-agent outputs, write files, update the lock. `--check` (CI dry-run), `--adopt` (absorb existing files on first sync), `--force` (override `on_target_modified: fail`), `--rule <id>` (single rule), `--ignore-fetch-failures` (skip GitHub rules whose fetch fails). When `defaults.gitignore_targets: true`, sync also maintains a managed `.gitignore` block. |
+| `global-sync` | Render `~/.rtango/spec.yaml` into global agent registries. Use `--spec PATH` as an override; targets can come from the spec, per-rule `targets`, or compatibility CLI arguments. Supports `--check`, `--force`, `--prune`, and `--lock`. Alias: `sync-global`. |
 | `status` | Preview the sync plan without writing. `--verbose` shows up-to-date items too. `--ignore-fetch-failures` skips GitHub rules whose fetch fails. |
 | `own`    | Record or clear a manual ownership decision when multiple rules target the same path. |
 | `add`    | Mechanically append a rule to the spec. Kinds: `--skill`, `--agent`, `--skill-set`, `--agent-set`, `--system`, `--collection-kind`/`--col`. |
@@ -89,6 +93,74 @@ rtango wander --ignore-fetch-failures
 
 - **Lock** — `.rtango/lock.yaml` records what was written, content hashes, and ownership decisions. Changes to target files detected outside rtango are caught by the `on_target_modified` policy (`fail` / `overwrite` / `skip`).
 - **Managed `.gitignore`** — optionally keep projected targets in a dedicated rtango block. Skill projections are ignored precisely as leaf directories (for example `.pi/skills/reviewer/`), while agent/system projections are ignored as exact files; broad roots like `.pi/` are never ignored.
+
+## Global registry sync
+
+`global-sync` is a user-level projection mode. Its canonical spec is
+`~/.rtango/spec.yaml`; pass `--spec PATH` only when using another registry:
+
+```sh
+rtango global-sync --spec ~/configs/team-spec.yaml
+```
+
+If the default spec is missing or empty, the command reports that state and
+suggests `rtango add --global`. Relative sources resolve beside the spec, and
+the sidecar lock defaults to `spec.lock.yaml` for `spec.yaml`. The legacy
+`~/.config/rtango/global.yaml` is detected with a migration warning.
+Existing targets are protected by `on_target_modified`; use `--force` when a
+manual edit should be replaced. Files removed from the spec are retained by
+default and are deleted only with `--prune`.
+
+The global spec keeps ordinary settings such as `defaults.on_target_modified`,
+rule `include`/`exclude`, frontmatter overrides, and `schema_agent`. Only these
+project-specific settings are ignored and reported:
+
+- `defaults.gitignore_targets` — no project `.gitignore` is touched;
+- `spec.local.yaml` — the selected global spec is self-contained;
+- project target paths, ownership decisions, and built-in skills.
+
+`spec.agents` is the default target set. A rule can override it with explicit
+targets, including several Codex profiles:
+
+```yaml
+version: 1
+agents: [claude-code, codex]
+rules:
+  - id: review
+    source: sources/review
+    schema_agent: claude-code
+    kind: skill
+    targets:
+      - agent: codex
+        home: ~/.codex/personal
+      - agent: codex
+        home: ~/.codex/work
+```
+
+Add scaffolds directly to the default spec:
+
+```sh
+rtango add --global reviewer --skill --target codex=~/.codex/work
+rtango add --global planner --agent --target codex=~/.codex/work
+```
+
+Without `--local` or `--repo`, these commands create editable sources under
+`~/.rtango/sources/`.
+
+Global skills use the documented shared Agent Skills directory for Codex,
+`~/.agents/skills/`; project-scoped Codex output remains `.codex/skills`.
+Global file-backed instruction targets are `~/.claude/CLAUDE.md`,
+`$CODEX_HOME/AGENTS.md`, `~/.copilot/copilot-instructions.md`,
+`$XDG_CONFIG_HOME/opencode/AGENTS.md`, and `~/.pi/agent/AGENTS.md`.
+The command honors `CODEX_HOME`, `COPILOT_HOME`, and `XDG_CONFIG_HOME` from
+its process environment, so separate Codex profiles can be synchronized by
+invoking it with the desired `CODEX_HOME` value. Codex's current user skill
+registry is shared at `~/.agents/skills/`, independently of that profile.
+When a rule declares an explicit target `home`, Codex skills are written below
+that profile's `skills/` directory instead, which makes multiple isolated
+profiles declarative.
+Cursor User Rules are settings-backed rather than a documented global file, so
+global system rules for `cursor` are rejected; global skills remain supported.
 
 ### Local overrides
 

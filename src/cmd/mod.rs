@@ -1,4 +1,5 @@
 pub mod add;
+pub mod global_sync;
 pub mod init;
 pub mod own;
 pub mod status;
@@ -58,6 +59,38 @@ pub enum Command {
         ignore_fetch_failures: bool,
     },
 
+    /// Sync a standalone spec into agents' global skill and instruction registries
+    #[command(name = "global-sync", visible_alias = "sync-global")]
+    GlobalSync {
+        /// Override the default ~/.rtango/spec.yaml
+        #[arg(long, value_name = "PATH")]
+        spec: Option<std::path::PathBuf>,
+
+        /// Target agents (for example claude-code codex opencode)
+        #[arg(value_name = "AGENT")]
+        agents: Vec<String>,
+
+        /// Target agent (repeatable alternative to positional agents)
+        #[arg(short = 'a', long = "agent", value_name = "AGENT")]
+        agent_flags: Vec<String>,
+
+        /// Optional lock file; defaults to <spec>.lock.yaml
+        #[arg(long, value_name = "PATH")]
+        lock: Option<std::path::PathBuf>,
+
+        /// Dry-run: exit 1 if global registries are out of sync
+        #[arg(short, long)]
+        check: bool,
+
+        /// Overwrite targets changed outside rtango
+        #[arg(short, long)]
+        force: bool,
+
+        /// Remove orphaned files recorded in the global lock
+        #[arg(long)]
+        prune: bool,
+    },
+
     /// Show sync plan without writing anything
     Status {
         /// Only show a single rule
@@ -101,6 +134,14 @@ pub enum Command {
     Add {
         /// Rule id (must be unique within the spec)
         id: String,
+
+        /// Add to the user-level ~/.rtango/spec.yaml instead of a project spec
+        #[arg(long)]
+        global: bool,
+
+        /// Global per-rule target (repeatable): AGENT or AGENT=HOME
+        #[arg(long = "target", value_name = "AGENT[=HOME]")]
+        targets: Vec<String>,
 
         /// Local source path (directory or file, relative to root).
         /// Combine with --collection-kind/--col to treat a local directory as a collection.
@@ -235,6 +276,19 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             adopt,
             ignore_fetch_failures,
         } => sync::exec_with_options(&root, check, force, rule, adopt, ignore_fetch_failures),
+        Command::GlobalSync {
+            spec,
+            agents,
+            agent_flags,
+            lock,
+            check,
+            force,
+            prune,
+        } => {
+            let mut targets = agents;
+            targets.extend(agent_flags);
+            global_sync::exec(spec.as_deref(), targets, lock, check, force, prune)
+        }
         Command::Status {
             rule,
             verbose,
@@ -265,9 +319,10 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             allowed_tools,
             include,
             exclude,
-        } => add::exec(
-            &root,
-            add::AddOptions {
+            global,
+            targets,
+        } => {
+            let options = add::AddOptions {
                 id,
                 local,
                 repo,
@@ -283,8 +338,13 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
                 allowed_tools,
                 include,
                 exclude,
-            },
-        ),
+            };
+            if global {
+                add::exec_global(&root, options, targets)
+            } else {
+                add::exec(&root, options)
+            }
+        }
     }
 }
 
