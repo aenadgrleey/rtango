@@ -180,12 +180,10 @@ fn system_file_path_for(
                     Ok(base.join("AGENTS.md"))
                 }
             }
-            "hermes" => {
-                Ok(
-                    global_agent_root(root, agent, environment, target.home.as_deref())?
-                        .join("SOUL.md"),
-                )
-            }
+            "hermes" => Ok(
+                global_agent_root(root, agent, environment, target.home.as_deref())?
+                    .join("SOUL.md"),
+            ),
             "pi" | "opencode" => {
                 Ok(
                     global_agent_root(root, agent, environment, target.home.as_deref())?

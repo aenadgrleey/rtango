@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 
 use crate::spec::AgentName;
 
+use super::Skill;
 use super::frontmatter::{FrontMatter, join_frontmatter};
 use super::permission::Permission;
-use super::Skill;
 
 /// Inverse of `FrontMatterMapper` — serialises canonical models back to
 /// an agent-specific frontmatter string.
