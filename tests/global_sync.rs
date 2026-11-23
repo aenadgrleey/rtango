@@ -300,3 +300,87 @@ fn cursor_global_skills_work_but_system_files_are_rejected() {
         .is_err()
     );
 }
+
+#[test]
+fn global_sync_supports_hermes_and_direct_claude_profile_homes() {
+    let spec_root = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let claude_profile = TempDir::new().unwrap();
+    let hermes_profile = TempDir::new().unwrap();
+
+    let skill_dir = spec_root.path().join("skills/unslop");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\nname: unslop\ndescription: Remove AI patterns\n---\nWrite plainly.\n",
+    )
+    .unwrap();
+    fs::write(spec_root.path().join("AGENTS.md"), "# Unified rules\n").unwrap();
+
+    let spec = spec_root.path().join("global.yaml");
+    fs::write(
+        &spec,
+        format!(
+            concat!(
+                "version: 1\n",
+                "rules:\n",
+                "  - id: system\n",
+                "    source: AGENTS.md\n",
+                "    schema_agent: plain\n",
+                "    kind: system\n",
+                "    targets:\n",
+                "      - agent: hermes\n",
+                "      - agent: hermes\n",
+                "        home: {hermes_profile}\n",
+                "      - agent: claude-code\n",
+                "        home: {claude_profile}\n",
+                "  - id: skills\n",
+                "    source: skills\n",
+                "    schema_agent: plain\n",
+                "    kind: skill-set\n",
+                "    targets:\n",
+                "      - agent: hermes\n",
+                "      - agent: hermes\n",
+                "        home: {hermes_profile}\n",
+                "      - agent: claude-code\n",
+                "        home: {claude_profile}\n",
+            ),
+            hermes_profile = hermes_profile.path().display(),
+            claude_profile = claude_profile.path().display(),
+        ),
+    )
+    .unwrap();
+
+    rtango::cmd::global_sync::exec_at(&spec, home.path(), Vec::new(), None, false, false, false)
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(home.path().join(".hermes/SOUL.md")).unwrap(),
+        "# Unified rules\n"
+    );
+    assert_eq!(
+        fs::read_to_string(hermes_profile.path().join("SOUL.md")).unwrap(),
+        "# Unified rules\n"
+    );
+    assert_eq!(
+        fs::read_to_string(claude_profile.path().join("CLAUDE.md")).unwrap(),
+        "# Unified rules\n"
+    );
+    assert!(
+        home.path()
+            .join(".hermes/skills-rtango/unslop/SKILL.md")
+            .is_file()
+    );
+    assert!(
+        hermes_profile
+            .path()
+            .join("skills-rtango/unslop/SKILL.md")
+            .is_file()
+    );
+    assert!(
+        claude_profile
+            .path()
+            .join("skills/unslop/SKILL.md")
+            .is_file()
+    );
+}

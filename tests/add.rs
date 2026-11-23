@@ -62,26 +62,6 @@ fn add_local_skill_set_appends_rule() {
 }
 
 #[test]
-fn add_local_agent_set_uses_agent_set_kind() {
-    let tmp = TempDir::new().unwrap();
-    write_spec(tmp.path(), &empty_spec(&["claude-code"]));
-
-    rtango::cmd::add::exec(
-        tmp.path(),
-        AddOptions {
-            id: "my-agents".into(),
-            local: Some(PathBuf::from("agents/")),
-            agent_set: true,
-            ..AddOptions::default()
-        },
-    )
-    .unwrap();
-
-    let spec = load_spec(tmp.path()).unwrap();
-    assert!(matches!(spec.rules[0].kind, RuleKind::AgentSet { .. }));
-}
-
-#[test]
 fn add_github_repo_parses_spec_string() {
     let tmp = TempDir::new().unwrap();
     write_spec(tmp.path(), &empty_spec(&["claude-code"]));
@@ -275,39 +255,6 @@ fn add_single_skill_stores_name_description_and_tools() {
 }
 
 #[test]
-fn add_single_agent_stores_overrides() {
-    let tmp = TempDir::new().unwrap();
-    write_spec(tmp.path(), &empty_spec(&["claude-code"]));
-
-    rtango::cmd::add::exec(
-        tmp.path(),
-        AddOptions {
-            id: "review".into(),
-            local: Some(PathBuf::from(".claude/agents/review.agent.md")),
-            agent: true,
-            name: Some("review".into()),
-            description: Some("PR review".into()),
-            ..AddOptions::default()
-        },
-    )
-    .unwrap();
-
-    let spec = load_spec(tmp.path()).unwrap();
-    match &spec.rules[0].kind {
-        RuleKind::Agent {
-            name,
-            description,
-            allowed_tools,
-        } => {
-            assert_eq!(name.as_deref(), Some("review"));
-            assert_eq!(description.as_deref(), Some("PR review"));
-            assert!(allowed_tools.is_none());
-        }
-        other => panic!("expected Agent kind, got {:?}", other),
-    }
-}
-
-#[test]
 fn add_skill_set_stores_include() {
     let tmp = TempDir::new().unwrap();
     write_spec(tmp.path(), &empty_spec(&["claude-code"]));
@@ -331,33 +278,6 @@ fn add_skill_set_stores_include() {
             assert!(exclude.is_empty());
         }
         other => panic!("expected SkillSet kind, got {:?}", other),
-    }
-}
-
-#[test]
-fn add_agent_set_stores_exclude() {
-    let tmp = TempDir::new().unwrap();
-    write_spec(tmp.path(), &empty_spec(&["claude-code"]));
-
-    rtango::cmd::add::exec(
-        tmp.path(),
-        AddOptions {
-            id: "mostly".into(),
-            local: Some(PathBuf::from("agents/")),
-            agent_set: true,
-            exclude: vec!["draft".into()],
-            ..AddOptions::default()
-        },
-    )
-    .unwrap();
-
-    let spec = load_spec(tmp.path()).unwrap();
-    match &spec.rules[0].kind {
-        RuleKind::AgentSet { include, exclude } => {
-            assert!(include.is_empty());
-            assert_eq!(exclude, &vec!["draft".to_string()]);
-        }
-        other => panic!("expected AgentSet kind, got {:?}", other),
     }
 }
 

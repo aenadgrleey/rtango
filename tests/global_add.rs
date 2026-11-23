@@ -48,37 +48,3 @@ fn global_add_scaffolds_skill_and_records_multiple_codex_targets() {
             .contains("name: reviewer")
     );
 }
-
-#[test]
-fn global_add_scaffolds_agent_file() {
-    let home = TempDir::new().unwrap();
-    let profile = home.path().join("codex");
-
-    exec_global_at(
-        home.path(),
-        AddOptions {
-            id: "planner".into(),
-            agent: true,
-            ..Default::default()
-        },
-        vec![format!("codex={}", profile.display())],
-    )
-    .unwrap();
-
-    let spec = load_spec_file(&spec_path(home.path())).unwrap();
-    match &spec.rules[0].source {
-        Source::Local(source) => assert!(home.path().join(".rtango").join(source).is_file()),
-        Source::Github(_) => panic!("scaffold should use a local source"),
-    }
-    exec_at(
-        &spec_path(home.path()),
-        home.path(),
-        Vec::new(),
-        None,
-        false,
-        false,
-        false,
-    )
-    .unwrap();
-    assert!(profile.join("agents/planner.agent.md").is_file());
-}

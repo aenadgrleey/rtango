@@ -40,25 +40,6 @@ fn detect_claude_code_by_skills_dir() {
 }
 
 #[test]
-fn detect_claude_code_by_agents_dir() {
-    let tmp = tempfile::tempdir().unwrap();
-    write_file(
-        &tmp.path().join(".claude/agents/reviewer.agent.md"),
-        "---\nname: reviewer\n---\nbody",
-    );
-
-    let agents = detect_agents(tmp.path());
-    assert_eq!(agents.len(), 1);
-    assert_eq!(agents[0].name, AgentName::new("claude-code"));
-    assert!(
-        agents[0]
-            .sources
-            .iter()
-            .any(|s| s.kind == SourceKind::AgentSet)
-    );
-}
-
-#[test]
 fn detect_copilot_by_skills_dir() {
     let tmp = tempfile::tempdir().unwrap();
     write_file(
@@ -74,25 +55,6 @@ fn detect_copilot_by_skills_dir() {
             .sources
             .iter()
             .any(|s| s.kind == SourceKind::SkillSet)
-    );
-}
-
-#[test]
-fn detect_copilot_by_agents_dir() {
-    let tmp = tempfile::tempdir().unwrap();
-    write_file(
-        &tmp.path().join(".github/agents/helper.agent.md"),
-        "---\nname: helper\n---\nbody",
-    );
-
-    let agents = detect_agents(tmp.path());
-    assert_eq!(agents.len(), 1);
-    assert_eq!(agents[0].name, AgentName::new("copilot"));
-    assert!(
-        agents[0]
-            .sources
-            .iter()
-            .any(|s| s.kind == SourceKind::AgentSet)
     );
 }
 
@@ -136,27 +98,6 @@ fn detect_both_agents() {
 }
 
 #[test]
-fn detect_claude_code_multiple_sources() {
-    let tmp = tempfile::tempdir().unwrap();
-    write_file(
-        &tmp.path().join(".claude/skills/s1/SKILL.md"),
-        "---\nname: s1\n---\n",
-    );
-    write_file(
-        &tmp.path().join(".claude/agents/a1.agent.md"),
-        "---\nname: a1\n---\n",
-    );
-
-    let agents = detect_agents(tmp.path());
-    assert_eq!(agents.len(), 1);
-    assert_eq!(agents[0].sources.len(), 2);
-
-    let kinds: Vec<&SourceKind> = agents[0].sources.iter().map(|s| &s.kind).collect();
-    assert!(kinds.contains(&&SourceKind::SkillSet));
-    assert!(kinds.contains(&&SourceKind::AgentSet));
-}
-
-#[test]
 fn detect_source_paths_are_relative() {
     let tmp = tempfile::tempdir().unwrap();
     write_file(
@@ -178,7 +119,7 @@ fn detect_source_has_correct_id() {
         "---\nname: foo\n---\n",
     );
     write_file(
-        &tmp.path().join(".github/agents/a.agent.md"),
+        &tmp.path().join(".github/skills/a/SKILL.md"),
         "---\nname: a\n---\n",
     );
 
@@ -206,15 +147,6 @@ fn detect_empty_skills_dir_not_detected() {
     assert!(agents.is_empty());
 }
 
-#[test]
-fn detect_empty_agents_dir_not_detected() {
-    let tmp = tempfile::tempdir().unwrap();
-    fs::create_dir_all(tmp.path().join(".github/agents")).unwrap();
-
-    let agents = detect_agents(tmp.path());
-    assert!(agents.is_empty());
-}
-
 // ── DetectedSource → Rule conversion ──────────────────────────
 
 #[test]
@@ -226,14 +158,6 @@ fn detected_source_to_rule_kind() {
     };
     let rule_kind: RuleKind = skill_set.kind.into();
     assert!(matches!(rule_kind, RuleKind::SkillSet { .. }));
-
-    let agent_set = DetectedSource {
-        id: "test-agents".into(),
-        path: ".github/agents/".into(),
-        kind: SourceKind::AgentSet,
-    };
-    let rule_kind: RuleKind = agent_set.kind.into();
-    assert!(matches!(rule_kind, RuleKind::AgentSet { .. }));
 }
 
 // ── init exec ─────────────────────────────────────────────────

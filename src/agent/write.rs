@@ -6,7 +6,7 @@ use crate::spec::AgentName;
 
 use super::frontmatter::{FrontMatter, join_frontmatter};
 use super::permission::Permission;
-use super::{Agent, Skill};
+use super::Skill;
 
 /// Inverse of `FrontMatterMapper` — serialises canonical models back to
 /// an agent-specific frontmatter string.
@@ -26,14 +26,6 @@ pub trait SkillsWriter {
     /// Write a single skill to `<root>/<agent-dir>/skills/<skill.name>/SKILL.md`.
     /// Returns the path of the written file.
     fn write_skill(&self, root: &Path, skill: &Skill) -> anyhow::Result<PathBuf>;
-}
-
-pub trait AgentsWriter {
-    fn name(&self) -> AgentName;
-
-    /// Write a single agent to `<root>/<agent-dir>/agents/<agent.name>.agent.md`.
-    /// Returns the path of the written file.
-    fn write_agent(&self, root: &Path, agent: &Agent) -> anyhow::Result<PathBuf>;
 }
 
 // ── Frontmatter formatting ────────────────────────────────────────
@@ -90,24 +82,6 @@ pub fn write_standard_skill(
         skill.body.clone()
     } else {
         join_frontmatter(&yaml, &skill.body)
-    };
-    fs::write(&file, &content)?;
-    Ok(file)
-}
-
-/// Write an agent as `<dir>/<name>.agent.md` using the given formatter.
-pub fn write_standard_agent(
-    dir: &Path,
-    agent: &Agent,
-    writer: &dyn FrontMatterWriter,
-) -> anyhow::Result<PathBuf> {
-    fs::create_dir_all(dir)?;
-    let file = dir.join(format!("{}.agent.md", agent.name));
-    let yaml = writer.format_frontmatter(&agent.front_matter);
-    let content = if yaml.is_empty() {
-        agent.body.clone()
-    } else {
-        join_frontmatter(&yaml, &agent.body)
     };
     fs::write(&file, &content)?;
     Ok(file)

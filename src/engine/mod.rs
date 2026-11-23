@@ -111,7 +111,6 @@ pub struct ExpandedItem {
 pub enum ExpandedKind {
     Skill(crate::agent::Skill),
     SkillAsset(SkillAsset),
-    Agent(crate::agent::Agent),
     System(SystemFile),
 }
 

@@ -7,17 +7,14 @@ use crate::spec::{AgentName, GithubSource, Rule, RuleKind, Source, Spec, Target}
 /// Options forwarded from the `rtango add` CLI.
 ///
 /// Exactly one of `local` / `repo` must be set (source); exactly one of
-/// `skill` / `agent` / `skill_set` / `agent_set` / `system` / `collection_kind`
-/// must be set (kind).
+/// `skill` / `skill_set` / `system` / `collection_kind` must be set (kind).
 #[derive(Debug, Default, Clone)]
 pub struct AddOptions {
     pub id: String,
     pub local: Option<PathBuf>,
     pub repo: Option<String>,
     pub skill: bool,
-    pub agent: bool,
     pub skill_set: bool,
-    pub agent_set: bool,
     pub system: bool,
     pub collection_kind: bool,
     pub schema: Option<String>,
@@ -119,41 +116,30 @@ fn build_rule(
     };
     let kind = match (
         opts.skill,
-        opts.agent,
         opts.skill_set,
-        opts.agent_set,
         opts.system,
         opts.collection_kind,
     ) {
-        (true, false, false, false, false, false) => RuleKind::Skill {
+        (true, false, false, false) => RuleKind::Skill {
             name: opts.name.clone(),
             description: opts.description.clone(),
             allowed_tools: opts.allowed_tools.clone(),
         },
-        (false, true, false, false, false, false) => RuleKind::Agent {
-            name: opts.name.clone(),
-            description: opts.description.clone(),
-            allowed_tools: opts.allowed_tools.clone(),
-        },
-        (false, false, true, false, false, false) => RuleKind::SkillSet {
+        (false, true, false, false) => RuleKind::SkillSet {
             include: opts.include.clone(),
             exclude: opts.exclude.clone(),
         },
-        (false, false, false, true, false, false) => RuleKind::AgentSet {
-            include: opts.include.clone(),
-            exclude: opts.exclude.clone(),
-        },
-        (false, false, false, false, true, false) => RuleKind::System,
-        (false, false, false, false, false, true) => RuleKind::Collection {
+        (false, false, true, false) => RuleKind::System,
+        (false, false, false, true) => RuleKind::Collection {
             include: opts.include.clone(),
             exclude: opts.exclude.clone(),
             schema_override: opts.schema.as_ref().map(AgentName::new),
         },
-        (false, false, false, false, false, false) => anyhow::bail!(
-            "kind required: pass --skill, --agent, --skill-set/--ss, --agent-set/--as, --system, or --collection-kind/--col"
+        (false, false, false, false) => anyhow::bail!(
+            "kind required: pass --skill, --skill-set/--ss, --system, or --collection-kind/--col"
         ),
         _ => anyhow::bail!(
-            "pass only one kind of --skill, --agent, --skill-set/--ss, --agent-set/--as, --system, or --collection-kind/--col"
+            "pass only one kind of --skill, --skill-set/--ss, --system, or --collection-kind/--col"
         ),
     };
     let schema = match opts.schema.as_deref() {
@@ -210,34 +196,22 @@ fn parse_targets(values: &[String], home: &Path) -> anyhow::Result<Vec<Target>> 
 }
 
 fn scaffold_global_source(home: &Path, opts: &mut AddOptions) -> anyhow::Result<()> {
-    if opts.local.is_some() || opts.repo.is_some() || (!opts.skill && !opts.agent) {
+    if opts.local.is_some() || opts.repo.is_some() || !opts.skill {
         return Ok(());
     }
-    let (directory, filename, body): (&str, String, String) = if opts.skill {
-        (
-            "skills",
-            "SKILL.md".into(),
-            format!(
-                "---\nname: {}\ndescription: {}\n---\n\n",
-                opts.id,
-                opts.description.as_deref().unwrap_or("")
-            ),
-        )
-    } else {
-        ("agents", format!("{}.agent.md", opts.id), String::new())
-    };
-    let relative = PathBuf::from("sources").join(directory).join(&opts.id);
-    let path = home.join(".rtango").join(&relative).join(filename);
+    let body = format!(
+        "---\nname: {}\ndescription: {}\n---\n\n",
+        opts.id,
+        opts.description.as_deref().unwrap_or("")
+    );
+    let relative = PathBuf::from("sources").join("skills").join(&opts.id);
+    let path = home.join(".rtango").join(&relative).join("SKILL.md");
     if path.exists() {
         anyhow::bail!("refusing to overwrite existing scaffold {}", path.display());
     }
     std::fs::create_dir_all(path.parent().unwrap())?;
     std::fs::write(&path, body)?;
-    opts.local = Some(if opts.skill {
-        path.parent().unwrap().to_path_buf()
-    } else {
-        path
-    });
+    opts.local = Some(path.parent().unwrap().to_path_buf());
     if opts.schema.is_none() {
         opts.schema = Some("plain".into());
     }

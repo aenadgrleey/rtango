@@ -2,10 +2,10 @@ use std::path::{Path, PathBuf};
 
 use crate::agent::detect::{self, DetectedAgent, DetectedSource, Detector, SourceKind};
 use crate::agent::frontmatter::{self, FrontMatter, FrontMatterMapper};
-use crate::agent::parse::{self, AgentsParser, SkillsParser};
+use crate::agent::parse::{self, SkillsParser};
 use crate::agent::permission::Permission;
-use crate::agent::write::{self, AgentsWriter, FrontMatterWriter, SkillsWriter};
-use crate::agent::{Agent, AgentSet, Skill, SkillSet};
+use crate::agent::write::{self, FrontMatterWriter, SkillsWriter};
+use crate::agent::{Skill, SkillSet};
 use crate::spec::AgentName;
 
 const NAME: &str = "plain";
@@ -18,15 +18,6 @@ impl SkillsParser for PlainParser {
     }
     fn parse_skills(&self, root: &Path) -> anyhow::Result<SkillSet> {
         parse::parse_standard_skills(&root.join("skills"), self)
-    }
-}
-
-impl AgentsParser for PlainParser {
-    fn name(&self) -> AgentName {
-        AgentName::new(NAME)
-    }
-    fn parse_agents(&self, root: &Path) -> anyhow::Result<AgentSet> {
-        parse::parse_standard_agents(&root.join("agents"), self)
     }
 }
 
@@ -91,15 +82,6 @@ impl SkillsWriter for PlainParser {
     }
 }
 
-impl AgentsWriter for PlainParser {
-    fn name(&self) -> AgentName {
-        AgentName::new(NAME)
-    }
-    fn write_agent(&self, root: &Path, agent: &Agent) -> anyhow::Result<PathBuf> {
-        write::write_standard_agent(&root.join("agents"), agent, self)
-    }
-}
-
 impl Detector for PlainParser {
     fn name(&self) -> AgentName {
         AgentName::new(NAME)
@@ -107,34 +89,16 @@ impl Detector for PlainParser {
 
     fn detect(&self, root: &Path) -> Option<DetectedAgent> {
         let skills_dir = root.join("skills");
-        let agents_dir = root.join("agents");
-
-        let has_skills = detect::dir_has_standard_skills(&skills_dir);
-        let has_agents = detect::dir_has_standard_agents(&agents_dir);
-
-        if !has_skills && !has_agents {
+        if !detect::dir_has_standard_skills(&skills_dir) {
             return None;
         }
-
-        let mut sources = Vec::new();
-        if has_skills {
-            sources.push(DetectedSource {
+        Some(DetectedAgent {
+            name: Detector::name(self),
+            sources: vec![DetectedSource {
                 id: format!("{NAME}-skills"),
                 path: PathBuf::from("skills/"),
                 kind: SourceKind::SkillSet,
-            });
-        }
-        if has_agents {
-            sources.push(DetectedSource {
-                id: format!("{NAME}-agents"),
-                path: PathBuf::from("agents/"),
-                kind: SourceKind::AgentSet,
-            });
-        }
-
-        Some(DetectedAgent {
-            name: Detector::name(self),
-            sources,
+            }],
         })
     }
 }

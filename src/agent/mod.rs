@@ -24,6 +24,7 @@ fn all_parsers() -> Vec<Box<dyn AgentParser>> {
         Box::new(CursorParser),
         Box::new(ClaudeCodeParser),
         Box::new(CodexParser),
+        Box::new(HermesParser),
         Box::new(PiParser),
         Box::new(OpenCodeParser),
         Box::new(PlainParser),
@@ -33,19 +34,14 @@ fn all_parsers() -> Vec<Box<dyn AgentParser>> {
 /// Blanket trait combining all per-agent capabilities.
 /// Every agent parser struct implements this via the individual traits.
 pub trait AgentParser:
-    SkillsParser
-    + AgentsParser
-    + FrontMatterMapper
-    + FrontMatterWriter
-    + SkillsWriter
-    + AgentsWriter
-    + Detector
+    SkillsParser + FrontMatterMapper + FrontMatterWriter + SkillsWriter + Detector
 {
 }
 impl AgentParser for CopilotParser {}
 impl AgentParser for CursorParser {}
 impl AgentParser for ClaudeCodeParser {}
 impl AgentParser for CodexParser {}
+impl AgentParser for HermesParser {}
 impl AgentParser for PiParser {}
 impl AgentParser for OpenCodeParser {}
 impl AgentParser for PlainParser {}
@@ -56,19 +52,7 @@ pub fn skills_parser(name: &AgentName) -> Option<Box<dyn SkillsParser>> {
         "cursor" => Some(Box::new(CursorParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
         "codex" => Some(Box::new(CodexParser)),
-        "pi" => Some(Box::new(PiParser)),
-        "opencode" => Some(Box::new(OpenCodeParser)),
-        "plain" => Some(Box::new(PlainParser)),
-        _ => None,
-    }
-}
-
-pub fn agents_parser(name: &AgentName) -> Option<Box<dyn AgentsParser>> {
-    match name.as_str() {
-        "copilot" => Some(Box::new(CopilotParser)),
-        "cursor" => Some(Box::new(CursorParser)),
-        "claude-code" => Some(Box::new(ClaudeCodeParser)),
-        "codex" => Some(Box::new(CodexParser)),
+        "hermes" => Some(Box::new(HermesParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
         "plain" => Some(Box::new(PlainParser)),
@@ -82,6 +66,7 @@ pub fn frontmatter_mapper(name: &AgentName) -> Option<Box<dyn FrontMatterMapper>
         "cursor" => Some(Box::new(CursorParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
         "codex" => Some(Box::new(CodexParser)),
+        "hermes" => Some(Box::new(HermesParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
         "plain" => Some(Box::new(PlainParser)),
@@ -95,6 +80,7 @@ pub fn frontmatter_writer(name: &AgentName) -> Option<Box<dyn FrontMatterWriter>
         "cursor" => Some(Box::new(CursorParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
         "codex" => Some(Box::new(CodexParser)),
+        "hermes" => Some(Box::new(HermesParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
         "plain" => Some(Box::new(PlainParser)),
@@ -108,19 +94,7 @@ pub fn skills_writer(name: &AgentName) -> Option<Box<dyn SkillsWriter>> {
         "cursor" => Some(Box::new(CursorParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
         "codex" => Some(Box::new(CodexParser)),
-        "pi" => Some(Box::new(PiParser)),
-        "opencode" => Some(Box::new(OpenCodeParser)),
-        "plain" => Some(Box::new(PlainParser)),
-        _ => None,
-    }
-}
-
-pub fn agents_writer(name: &AgentName) -> Option<Box<dyn AgentsWriter>> {
-    match name.as_str() {
-        "copilot" => Some(Box::new(CopilotParser)),
-        "cursor" => Some(Box::new(CursorParser)),
-        "claude-code" => Some(Box::new(ClaudeCodeParser)),
-        "codex" => Some(Box::new(CodexParser)),
+        "hermes" => Some(Box::new(HermesParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
         "plain" => Some(Box::new(PlainParser)),
@@ -134,6 +108,7 @@ pub fn detector(name: &AgentName) -> Option<Box<dyn Detector>> {
         "cursor" => Some(Box::new(CursorParser)),
         "claude-code" => Some(Box::new(ClaudeCodeParser)),
         "codex" => Some(Box::new(CodexParser)),
+        "hermes" => Some(Box::new(HermesParser)),
         "pi" => Some(Box::new(PiParser)),
         "opencode" => Some(Box::new(OpenCodeParser)),
         "plain" => Some(Box::new(PlainParser)),
@@ -160,15 +135,4 @@ pub struct Skill {
     pub body: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Agent {
-    pub name: String,
-    pub file: PathBuf,
-    #[serde(skip)]
-    pub front_matter: FrontMatter,
-    #[serde(skip)]
-    pub body: String,
-}
-
 pub type SkillSet = Vec<Skill>;
-pub type AgentSet = Vec<Agent>;

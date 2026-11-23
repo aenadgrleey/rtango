@@ -1,11 +1,11 @@
 ---
-description: How to use rtango — the package manager for AI-agent skills, agents, and system instructions. Covers init, sync, status, conflict resolution, and common workflows.
+description: How to use rtango — the package manager for AI-agent skills and system instructions. Covers init, sync, global-sync, status, conflict resolution, and common workflows.
 name: rtango
 ---
 
 # rtango Skill
 
-This skill teaches AI agents how to use `rtango` to manage and sync skills, agents, and instruction files across multiple coding agents (Claude Code, GitHub Copilot, Cursor, Codex, OpenCode, Pi).
+This skill teaches AI agents how to use `rtango` to manage and sync skills and instruction files across multiple coding agents (Claude Code, GitHub Copilot, Cursor, Codex, OpenCode, Pi, Hermes).
 
 Projects may also contain `.rtango/spec.local.yaml`. It overlays the shared spec for local use: `agents` replaces the main agent list, specified `defaults` fields override main defaults, `exclude` removes main rule IDs, and `rules` replaces matching IDs or adds local-only rules. Do not edit or commit this file unless the user intends to change their local configuration. `rtango add` writes only `.rtango/spec.yaml`.
 
@@ -18,7 +18,7 @@ rtango is a package manager for AI-agent configuration. You author a skill or in
 - **spec.yaml** (`.rtango/spec.yaml`) — declares agents, rules, and defaults. This is the source of truth for what gets synced.
 - **lock.yaml** (`.rtango/lock.yaml`) — records what was last written, content hashes, and ownership decisions. Never hand-edit; regenerate with `rtango sync`.
 - **Rule** — a `{id, source, schema_agent, kind}` declaration. Source can be a local path or a GitHub ref (`github: owner/repo@ref:path`).
-- **Kind** — one of: `skill`, `skill-set`, `agent`, `agent-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md`).
+- **Kind** — one of: `skill`, `skill-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md` / `SOUL.md`), `collection`.
 - **schema_agent** — the agent whose native format the source file is written in. rtango reads frontmatter and permissions using this agent's parser.
 
 ## Commands
@@ -43,14 +43,8 @@ Append a rule to the spec. This is a mechanical helper — it does not validate 
 # Add a local skill (single file or directory)
 rtango add my-skill --local .claude/skills/my-skill --skill
 
-# Add a local agent
-rtango add my-agent --local .claude/agents/my-agent --agent
-
 # Add a skill-set (directory containing multiple skills)
 rtango add my-skills --local .github/skills/ --skill-set
-
-# Add an agent-set
-rtango add my-agents --local .github/agents/ --agent-set
 
 # Add a system instruction file
 rtango add instructions --local AGENTS.md --system
@@ -122,33 +116,29 @@ Add editable global sources without a path:
 
 ```sh
 rtango add --global reviewer --skill --target codex=~/.codex/work
-rtango add --global planner --agent --target codex=~/.codex/work
 ```
 
 These scaffold files below `~/.rtango/sources/`. Use `--local` or `--repo` for
-an existing source. `--target AGENT=HOME` can be repeated for multiple Codex
-profiles.
+an existing source. `--target AGENT=HOME` can be repeated for multiple profiles.
 
 Global skills are supported for Claude Code, Codex (via `~/.agents/skills`), Copilot CLI, Cursor,
-OpenCode, and Pi. Global system files are supported for Claude Code, Codex,
-Copilot CLI, OpenCode, and Pi. Cursor User Rules are settings-backed and are
+OpenCode, Pi, and Hermes. Global system files are supported for Claude Code, Codex,
+Copilot CLI, OpenCode, Pi, and Hermes. Cursor User Rules are settings-backed and are
 rejected when a `kind: system` rule targets Cursor.
-The command honors `CODEX_HOME`, `COPILOT_HOME`, and `XDG_CONFIG_HOME`; for
-example, prefix the command with `CODEX_HOME=/path/to/profile` to sync that
-Codex profile's `AGENTS.md`. Codex user skills currently use the shared
-`~/.agents/skills/` registry unless an explicit rule target has `home`, in
-which case that profile's `skills/` directory is used.
+The command honors `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `COPILOT_HOME`, `XDG_CONFIG_HOME`, and `HERMES_HOME`.
+When an explicit rule target declares `home`, Codex writes skills under `<home>/skills/`, Claude Code uses `<home>` directly as its config dir, and Hermes writes `SOUL.md` and `skills-rtango/` under `<home>`.
 
 Global registry paths:
 
-| Agent | Skills | Agent files | System file |
-| --- | --- | --- | --- |
-| Claude Code | `~/.claude/skills/` | `~/.claude/agents/<name>.agent.md` | `~/.claude/CLAUDE.md` |
-| Codex | `~/.agents/skills/` | `$CODEX_HOME/agents/<name>.agent.md` | `$CODEX_HOME/AGENTS.md` or existing `AGENTS.override.md` |
-| Copilot CLI | `$COPILOT_HOME/skills/` | `$COPILOT_HOME/agents/<name>.agent.md` | `$COPILOT_HOME/copilot-instructions.md` |
-| Cursor | `~/.cursor/skills/` | `~/.cursor/agents/<name>.md` | unsupported globally |
-| OpenCode | `$XDG_CONFIG_HOME/opencode/skills/` | `$XDG_CONFIG_HOME/opencode/agents/<name>.agent.md` | `$XDG_CONFIG_HOME/opencode/AGENTS.md` |
-| Pi | `~/.pi/agent/skills/` | `~/.pi/agent/agents/<name>.md` | `~/.pi/agent/AGENTS.md` |
+| Agent | Skills | System file |
+| --- | --- | --- |
+| Claude Code | `$CLAUDE_CONFIG_DIR/skills/` | `$CLAUDE_CONFIG_DIR/CLAUDE.md` |
+| Codex | `~/.agents/skills/` (or `<target.home>/skills/`) | `$CODEX_HOME/AGENTS.md` or existing `AGENTS.override.md` |
+| Copilot CLI | `$COPILOT_HOME/skills/` | `$COPILOT_HOME/copilot-instructions.md` |
+| Cursor | `~/.cursor/skills/` (or `<target.home>/.cursor/skills/`) | unsupported globally |
+| OpenCode | `$XDG_CONFIG_HOME/opencode/skills/` | `$XDG_CONFIG_HOME/opencode/AGENTS.md` |
+| Pi | `~/.pi/agent/skills/` | `~/.pi/agent/AGENTS.md` |
+| Hermes | `$HERMES_HOME/skills-rtango/` | `$HERMES_HOME/SOUL.md` |
 
 Global sync treats an existing untracked target as a conflict; `--force` is
 required to replace it. Existing global targets removed from the spec are
@@ -185,7 +175,7 @@ rtango init
 
 # 2. Add rules
 rtango add my-skill --local .claude/skills/my-skill --skill
-rtango add my-agents --local .github/agents/ --agent-set
+rtango add my-skills --local .github/skills/ --skill-set
 
 # 3. Preview
 rtango status

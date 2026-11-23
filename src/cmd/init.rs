@@ -44,7 +44,6 @@ pub fn exec(
                 on_target_modified: None,
                 kind: match source.kind {
                     SourceKind::SkillSet => RuleKind::skill_set(),
-                    SourceKind::AgentSet => RuleKind::agent_set(),
                 },
             });
         }

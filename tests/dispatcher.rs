@@ -1,4 +1,4 @@
-use rtango::agent::{agents_parser, frontmatter_mapper, skills_parser};
+use rtango::agent::{frontmatter_mapper, skills_parser};
 use rtango::spec::AgentName;
 
 const KNOWN_AGENTS: &[&str] = &[
@@ -6,6 +6,7 @@ const KNOWN_AGENTS: &[&str] = &[
     "cursor",
     "claude-code",
     "codex",
+    "hermes",
     "pi",
     "opencode",
 ];
@@ -23,21 +24,6 @@ fn skills_parser_known() {
 #[test]
 fn skills_parser_unknown() {
     assert!(skills_parser(&AgentName::new("unknown")).is_none());
-}
-
-#[test]
-fn agents_parser_known() {
-    for name in KNOWN_AGENTS {
-        assert!(
-            agents_parser(&AgentName::new(*name)).is_some(),
-            "missing agents_parser for {name}"
-        );
-    }
-}
-
-#[test]
-fn agents_parser_unknown() {
-    assert!(agents_parser(&AgentName::new("unknown")).is_none());
 }
 
 #[test]

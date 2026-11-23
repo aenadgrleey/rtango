@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use rtango::agent::permission::Permission;
-use rtango::agent::{CopilotParser, parse_standard_agents, parse_standard_skills};
+use rtango::agent::{CopilotParser, parse_standard_skills};
 
 fn write_file(path: &Path, content: &str) {
     if let Some(parent) = path.parent() {
@@ -19,17 +19,6 @@ allowed-tools: read
 ---
 Hello world!
 ";
-
-const AGENT_CONTENT: &str = "\
----
-name: reviewer
-description: reviews code
-allowed-tools: read edit
----
-You are a code reviewer.
-";
-
-// ── parse_standard_skills ──────────────────────────────────────
 
 #[test]
 fn skills_from_valid_dir() {
@@ -101,58 +90,4 @@ fn skills_no_frontmatter_gets_default() {
     assert_eq!(skills.len(), 1);
     assert!(skills[0].front_matter.name.is_none());
     assert!(skills[0].front_matter.allowed_tools.is_empty());
-}
-
-// ── parse_standard_agents ──────────────────────────────────────
-
-#[test]
-fn agents_from_valid_dir() {
-    let tmp = tempfile::tempdir().unwrap();
-    let agents_dir = tmp.path().join("agents");
-    write_file(&agents_dir.join("reviewer.agent.md"), AGENT_CONTENT);
-
-    let agents = parse_standard_agents(&agents_dir, &CopilotParser).unwrap();
-    assert_eq!(agents.len(), 1);
-    assert_eq!(agents[0].name, "reviewer");
-    assert_eq!(
-        agents[0].front_matter.description.as_deref(),
-        Some("reviews code")
-    );
-    assert_eq!(
-        agents[0].front_matter.allowed_tools,
-        vec![Permission::Read, Permission::Edit],
-    );
-    assert_eq!(agents[0].body, "You are a code reviewer.\n");
-}
-
-#[test]
-fn agents_sorted_by_name() {
-    let tmp = tempfile::tempdir().unwrap();
-    let dir = tmp.path().join("agents");
-    write_file(&dir.join("zeta.agent.md"), "---\nname: z\n---\n");
-    write_file(&dir.join("alpha.agent.md"), "---\nname: a\n---\n");
-
-    let agents = parse_standard_agents(&dir, &CopilotParser).unwrap();
-    assert_eq!(agents[0].name, "alpha");
-    assert_eq!(agents[1].name, "zeta");
-}
-
-#[test]
-fn agents_missing_dir() {
-    let tmp = tempfile::tempdir().unwrap();
-    let agents = parse_standard_agents(&tmp.path().join("nope"), &CopilotParser).unwrap();
-    assert!(agents.is_empty());
-}
-
-#[test]
-fn agents_ignores_non_agent_files() {
-    let tmp = tempfile::tempdir().unwrap();
-    let dir = tmp.path().join("agents");
-    write_file(&dir.join("ok.agent.md"), "---\nname: ok\n---\n");
-    write_file(&dir.join("readme.md"), "not an agent");
-    write_file(&dir.join("notes.txt"), "not an agent");
-
-    let agents = parse_standard_agents(&dir, &CopilotParser).unwrap();
-    assert_eq!(agents.len(), 1);
-    assert_eq!(agents[0].name, "ok");
 }

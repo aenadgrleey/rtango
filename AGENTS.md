@@ -4,7 +4,7 @@ Context for AI agents working on the `rtango` codebase.
 
 ## What this repo is
 
-`rtango` is a Rust CLI that acts as a package manager for AI-agent skills, agents, and system instruction files. A single source file is declared in `.rtango/spec.yaml` and rendered/synced into every supported agent's native layout (paths, frontmatter, permission vocabulary).
+`rtango` is a Rust CLI that acts as a package manager for AI-agent skills and system instruction files. A single source file is declared in `.rtango/spec.yaml` and rendered/synced into every supported agent's native layout (paths, frontmatter, permission vocabulary).
 
 See `README.md` for the user-facing overview.
 
@@ -42,7 +42,7 @@ demo/                  # worked example — real spec.yaml, lock.yaml, sample sk
 - `Spec` (`src/spec/spec.rs`) — `version`, `agents`, `defaults`, `rules`.
 - `Rule` — `id`, `source`, `schema_agent`, `kind`, optional `include`/`exclude`, optional frontmatter overrides, optional per-rule `on_target_modified`.
 - `Source` — local path or `github: owner/repo[@ref][:path]`.
-- `Kind` — `skill`, `skill-set`, `agent`, `agent-set`, `system`.
+- `Kind` — `skill`, `skill-set`, `system`, `collection`.
 - `Lock` — tracks rendered outputs, content hashes, ownership decisions.
 - **Canonical permission set**: Read, Write, Edit, Shell, Grep, Glob, WebFetch, WebSearch, NotebookEdit, TodoWrite, Other. Each agent impl maps this set to its native tokens. Tokens an agent doesn't understand round-trip via `Other(_)`.
 

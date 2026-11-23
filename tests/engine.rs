@@ -17,22 +17,10 @@ fn setup_copilot_skill(root: &std::path::Path, name: &str, body: &str) {
     fs::write(dir.join("SKILL.md"), body).unwrap();
 }
 
-fn setup_copilot_agent(root: &std::path::Path, name: &str, body: &str) {
-    let dir = root.join(".github/agents");
-    fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join(format!("{}.agent.md", name)), body).unwrap();
-}
-
 fn setup_claude_skill(root: &std::path::Path, name: &str, body: &str) {
     let dir = root.join(format!(".claude/skills/{}", name));
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("SKILL.md"), body).unwrap();
-}
-
-fn setup_pi_agent(root: &std::path::Path, name: &str, body: &str) {
-    let dir = root.join(".pi/agents");
-    fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join(format!("{}.md", name)), body).unwrap();
 }
 
 fn empty_lock() -> Lock {
@@ -64,17 +52,6 @@ fn skill_set_rule(id: &str, path: &str, schema: &str) -> Rule {
     }
 }
 
-fn agent_set_rule(id: &str, path: &str, schema: &str) -> Rule {
-    Rule {
-        id: id.to_string(),
-        source: Source::Local(PathBuf::from(path)),
-        schema_agent: AgentName::new(schema),
-        targets: None,
-        on_target_modified: None,
-        kind: RuleKind::agent_set(),
-    }
-}
-
 fn single_skill_rule(id: &str, path: &str, schema: &str) -> Rule {
     Rule {
         id: id.to_string(),
@@ -83,17 +60,6 @@ fn single_skill_rule(id: &str, path: &str, schema: &str) -> Rule {
         targets: None,
         on_target_modified: None,
         kind: RuleKind::skill(),
-    }
-}
-
-fn single_agent_rule(id: &str, path: &str, schema: &str) -> Rule {
-    Rule {
-        id: id.to_string(),
-        source: Source::Local(PathBuf::from(path)),
-        schema_agent: AgentName::new(schema),
-        targets: None,
-        on_target_modified: None,
-        kind: RuleKind::agent(),
     }
 }
 
@@ -160,95 +126,6 @@ fn expand_skill_set_reads_from_non_native_source_path() {
 }
 
 #[test]
-fn expand_agent_set_reads_from_non_native_source_path() {
-    // Same regression for AgentSet.
-    let tmp = TempDir::new().unwrap();
-    let root = tmp.path();
-    fs::create_dir_all(root.join("my-team/agents")).unwrap();
-    fs::write(
-        root.join("my-team/agents/reviewer.agent.md"),
-        "---\nname: reviewer\n---\nReviews",
-    )
-    .unwrap();
-    fs::write(
-        root.join("my-team/agents/planner.agent.md"),
-        "---\nname: planner\n---\nPlans",
-    )
-    .unwrap();
-    setup_copilot_agent(root, "decoy", "Ignored");
-
-    let rule = agent_set_rule("my-team", "my-team/agents/", "claude-code");
-    let items = expand_rule(root, &rule).unwrap();
-
-    let names: Vec<&str> = items
-        .iter()
-        .filter_map(|i| match &i.kind {
-            ExpandedKind::Agent(a) => Some(a.name.as_str()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(names.len(), 2);
-    assert!(names.contains(&"reviewer"));
-    assert!(names.contains(&"planner"));
-    assert!(!names.contains(&"decoy"));
-}
-
-#[test]
-fn expand_pi_agent_set_reads_md_suffix_from_non_native_source_path() {
-    // pi agent files use `<name>.md` (not `.agent.md`). A non-native source
-    // must still honour that suffix.
-    let tmp = TempDir::new().unwrap();
-    let root = tmp.path();
-    fs::create_dir_all(root.join("my-team/agents")).unwrap();
-    fs::write(
-        root.join("my-team/agents/reviewer.md"),
-        "---\nname: reviewer\n---\nReviews",
-    )
-    .unwrap();
-    fs::write(
-        root.join("my-team/agents/planner.agent.md"),
-        "---\nname: planner\n---\nPlans",
-    )
-    .unwrap();
-
-    let rule = agent_set_rule("my-team", "my-team/agents/", "pi");
-    let items = expand_rule(root, &rule).unwrap();
-
-    let names: Vec<&str> = items
-        .iter()
-        .filter_map(|i| match &i.kind {
-            ExpandedKind::Agent(a) => Some(a.name.as_str()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(names.len(), 2);
-    assert!(names.contains(&"reviewer"));
-    assert!(names.contains(&"planner"));
-}
-
-#[test]
-fn expand_agent_set_finds_all_agents() {
-    let tmp = TempDir::new().unwrap();
-    let root = tmp.path();
-    setup_copilot_agent(root, "reviewer", "Review stuff");
-    setup_copilot_agent(root, "planner", "Plan stuff");
-
-    let rule = agent_set_rule("agents", ".github/agents", "copilot");
-    let items = expand_rule(root, &rule).unwrap();
-
-    assert_eq!(items.len(), 2);
-    let names: Vec<&str> = items
-        .iter()
-        .map(|i| match &i.kind {
-            ExpandedKind::Agent(a) => a.name.as_str(),
-            _ => panic!("expected agent"),
-        })
-        .collect();
-    assert!(names.contains(&"reviewer"));
-    assert!(names.contains(&"planner"));
-}
-
-#[test]
 fn expand_single_skill() {
     let tmp = TempDir::new().unwrap();
     let root = tmp.path();
@@ -300,64 +177,6 @@ fn expand_single_skill_includes_auxiliary_files() {
 }
 
 #[test]
-fn expand_single_agent() {
-    let tmp = TempDir::new().unwrap();
-    let root = tmp.path();
-    setup_copilot_agent(
-        root,
-        "helper",
-        "---\nname: Helper\n---\nDoes helpful things",
-    );
-
-    let rule = single_agent_rule("a1", ".github/agents/helper.agent.md", "copilot");
-    let items = expand_rule(root, &rule).unwrap();
-
-    assert_eq!(items.len(), 1);
-    match &items[0].kind {
-        ExpandedKind::Agent(a) => {
-            assert_eq!(a.name, "helper");
-            assert_eq!(a.body, "Does helpful things");
-        }
-        _ => panic!("expected agent"),
-    }
-}
-
-#[test]
-fn expand_single_pi_agent() {
-    let tmp = TempDir::new().unwrap();
-    let root = tmp.path();
-    setup_pi_agent(
-        root,
-        "reviewer",
-        "---\nname: reviewer\ndescription: reviews code\n---\nYou review code.\n",
-    );
-
-    let rule = single_agent_rule("a1", ".pi/agents/reviewer.md", "pi");
-    let items = expand_rule(root, &rule).unwrap();
-
-    assert_eq!(items.len(), 1);
-    match &items[0].kind {
-        ExpandedKind::Agent(a) => {
-            assert_eq!(a.name, "reviewer");
-            assert_eq!(a.body, "You review code.\n");
-        }
-        _ => panic!("expected agent"),
-    }
-
-    let rendered = render_for_agent(
-        root,
-        &items[0],
-        &AgentName::new("pi"),
-        &AgentName::new("pi"),
-    )
-    .unwrap();
-    assert_eq!(
-        rendered.target_path,
-        PathBuf::from(".pi/agents/reviewer.md")
-    );
-}
-
-#[test]
 fn expand_skill_set_honors_include_filter() {
     let tmp = TempDir::new().unwrap();
     let root = tmp.path();
@@ -389,38 +208,6 @@ fn expand_skill_set_honors_include_filter() {
     assert!(names.contains(&"alpha"));
     assert!(names.contains(&"gamma"));
     assert!(!names.contains(&"beta"));
-}
-
-#[test]
-fn expand_agent_set_honors_exclude_filter() {
-    let tmp = TempDir::new().unwrap();
-    let root = tmp.path();
-    setup_copilot_agent(root, "reviewer", "Review");
-    setup_copilot_agent(root, "planner", "Plan");
-    setup_copilot_agent(root, "draft", "Draft");
-
-    let rule = Rule {
-        id: "mostly".into(),
-        source: Source::Local(PathBuf::from(".github/agents")),
-        schema_agent: AgentName::new("copilot"),
-        targets: None,
-        on_target_modified: None,
-        kind: RuleKind::AgentSet {
-            include: vec![],
-            exclude: vec!["draft".into()],
-        },
-    };
-    let items = expand_rule(root, &rule).unwrap();
-
-    let names: Vec<&str> = items
-        .iter()
-        .map(|i| match &i.kind {
-            ExpandedKind::Agent(a) => a.name.as_str(),
-            _ => panic!("expected agent"),
-        })
-        .collect();
-    assert_eq!(names.len(), 2);
-    assert!(!names.contains(&"draft"));
 }
 
 #[test]
@@ -482,35 +269,6 @@ fn render_skill_for_claude_code() {
     );
     assert!(rendered.content.contains("Deploy instructions"));
     assert!(!rendered.content_hash.is_empty());
-}
-
-#[test]
-fn render_agent_for_copilot() {
-    let tmp = TempDir::new().unwrap();
-    let root = tmp.path();
-    setup_claude_skill(root, "test-skill", "Body only");
-
-    // Set up a claude-code agent
-    let agents_dir = root.join(".claude/agents");
-    fs::create_dir_all(&agents_dir).unwrap();
-    fs::write(
-        agents_dir.join("reviewer.agent.md"),
-        "---\nname: Reviewer\n---\nReview code",
-    )
-    .unwrap();
-
-    let rule = single_agent_rule("a1", ".claude/agents/reviewer.agent.md", "claude-code");
-    let items = expand_rule(root, &rule).unwrap();
-    let item = &items[0];
-
-    let target = AgentName::new("copilot");
-    let rendered = render_for_agent(root, item, &AgentName::new("claude-code"), &target).unwrap();
-
-    assert_eq!(
-        rendered.target_path,
-        PathBuf::from(".github/agents/reviewer.agent.md")
-    );
-    assert!(rendered.content.contains("Review code"));
 }
 
 // ── compute_plan tests ───────────────────────────────────────────────
@@ -883,41 +641,6 @@ fn plan_skips_when_source_equals_target() {
         plan.items[0].target_path,
         PathBuf::from(".claude/skills/my-skill/SKILL.md")
     );
-}
-
-#[test]
-fn full_roundtrip_with_agents() {
-    let tmp = TempDir::new().unwrap();
-    let root = tmp.path();
-
-    // Set up source agents in copilot format
-    setup_copilot_agent(
-        root,
-        "reviewer",
-        "---\nname: Reviewer\n---\nReview code carefully",
-    );
-
-    let spec = make_spec(
-        vec!["claude-code"],
-        vec![agent_set_rule("agents", ".github/agents", "copilot")],
-    );
-    let lock = empty_lock();
-
-    let plan = compute_plan(root, &spec, &lock, false, false).unwrap();
-    assert_eq!(plan.items.len(), 1);
-    assert_eq!(plan.items[0].status, DeploymentStatus::Create);
-
-    let new_lock = execute_plan(root, &plan, &lock, false).unwrap();
-
-    let target = root.join(".claude/agents/reviewer.agent.md");
-    assert!(target.exists());
-    let content = fs::read_to_string(&target).unwrap();
-    assert!(content.contains("Review code carefully"));
-    assert!(content.contains("name:"));
-
-    // Second sync — should be up-to-date
-    let plan2 = compute_plan(root, &spec, &new_lock, false, false).unwrap();
-    assert!(plan2.is_clean());
 }
 
 // ── Ownership tests ──────────────────────────────────────────────────

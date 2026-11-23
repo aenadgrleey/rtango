@@ -3,10 +3,8 @@ use std::fs;
 
 use rtango::agent::frontmatter::{FrontMatter, FrontMatterMapper, split_frontmatter};
 use rtango::agent::permission::Permission;
-use rtango::agent::write::{
-    AgentsWriter, FrontMatterWriter, SkillsWriter, write_standard_agent, write_standard_skill,
-};
-use rtango::agent::{Agent, ClaudeCodeParser, CopilotParser, Skill};
+use rtango::agent::write::{FrontMatterWriter, SkillsWriter, write_standard_skill};
+use rtango::agent::{ClaudeCodeParser, CopilotParser, Skill};
 
 // ── Copilot: format_permission ────────────────────────────────────
 
@@ -273,20 +271,6 @@ fn make_skill(name: &str, body: &str, tools: Vec<Permission>) -> Skill {
     }
 }
 
-fn make_agent(name: &str, body: &str, tools: Vec<Permission>) -> Agent {
-    Agent {
-        name: name.into(),
-        file: Default::default(),
-        front_matter: FrontMatter {
-            name: Some(name.into()),
-            description: Some(format!("{name} agent")),
-            allowed_tools: tools,
-            extra: BTreeMap::new(),
-        },
-        body: body.into(),
-    }
-}
-
 #[test]
 fn write_skill_creates_correct_layout() {
     let tmp = tempfile::tempdir().unwrap();
@@ -340,46 +324,7 @@ fn write_skill_overwrites_existing() {
     assert_eq!(body, "v2\n");
 }
 
-// ── write_standard_agent ──────────────────────────────────────────
-
-#[test]
-fn write_agent_creates_correct_layout() {
-    let tmp = tempfile::tempdir().unwrap();
-    let dir = tmp.path().join("agents");
-    let agent = make_agent(
-        "reviewer",
-        "You review code.\n",
-        vec![Permission::Read, Permission::Edit],
-    );
-    let path = write_standard_agent(&dir, &agent, &CopilotParser).unwrap();
-
-    assert_eq!(path, dir.join("reviewer.agent.md"));
-    assert!(path.is_file());
-
-    let content = fs::read_to_string(&path).unwrap();
-    let (yaml, body) = split_frontmatter(&content);
-    let fm = CopilotParser.parse_frontmatter(yaml.unwrap()).unwrap();
-    assert_eq!(fm.name.as_deref(), Some("reviewer"));
-    assert_eq!(fm.allowed_tools, vec![Permission::Read, Permission::Edit]);
-    assert_eq!(body, "You review code.\n");
-}
-
-#[test]
-fn write_agent_no_frontmatter() {
-    let tmp = tempfile::tempdir().unwrap();
-    let dir = tmp.path().join("agents");
-    let agent = Agent {
-        name: "bare".into(),
-        file: Default::default(),
-        front_matter: FrontMatter::default(),
-        body: "Just a body.\n".into(),
-    };
-    let path = write_standard_agent(&dir, &agent, &CopilotParser).unwrap();
-    let content = fs::read_to_string(&path).unwrap();
-    assert_eq!(content, "Just a body.\n");
-}
-
-// ── SkillsWriter / AgentsWriter via agent parsers ─────────────────
+// ── SkillsWriter via agent parsers ────────────────────────────────
 
 #[test]
 fn copilot_writer_uses_github_dir() {
@@ -395,22 +340,6 @@ fn claude_code_writer_uses_claude_dir() {
     let skill = make_skill("greet", "Hi\n", vec![Permission::Read]);
     let path = ClaudeCodeParser.write_skill(tmp.path(), &skill).unwrap();
     assert_eq!(path, tmp.path().join(".claude/skills/greet/SKILL.md"));
-}
-
-#[test]
-fn copilot_agent_writer_uses_github_dir() {
-    let tmp = tempfile::tempdir().unwrap();
-    let agent = make_agent("reviewer", "Review.\n", vec![Permission::Read]);
-    let path = CopilotParser.write_agent(tmp.path(), &agent).unwrap();
-    assert_eq!(path, tmp.path().join(".github/agents/reviewer.agent.md"));
-}
-
-#[test]
-fn claude_code_agent_writer_uses_claude_dir() {
-    let tmp = tempfile::tempdir().unwrap();
-    let agent = make_agent("reviewer", "Review.\n", vec![Permission::Read]);
-    let path = ClaudeCodeParser.write_agent(tmp.path(), &agent).unwrap();
-    assert_eq!(path, tmp.path().join(".claude/agents/reviewer.agent.md"));
 }
 
 // ── Cross-agent roundtrip: parse from copilot → write as claude-code ──

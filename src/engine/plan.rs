@@ -22,8 +22,10 @@ use super::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalEnvironment {
     pub home: PathBuf,
+    pub claude_config_dir: PathBuf,
     pub codex_home: PathBuf,
     pub copilot_home: PathBuf,
+    pub hermes_home: PathBuf,
     pub xdg_config_home: PathBuf,
 }
 
@@ -32,12 +34,18 @@ impl GlobalEnvironment {
         let home = dirs::home_dir()
             .ok_or_else(|| anyhow::anyhow!("could not determine home directory"))?;
         Ok(Self {
+            claude_config_dir: std::env::var_os("CLAUDE_CONFIG_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join(".claude")),
             codex_home: std::env::var_os("CODEX_HOME")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| home.join(".codex")),
             copilot_home: std::env::var_os("COPILOT_HOME")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| home.join(".copilot")),
+            hermes_home: std::env::var_os("HERMES_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join(".hermes")),
             xdg_config_home: std::env::var_os("XDG_CONFIG_HOME")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| home.join(".config")),
@@ -49,8 +57,10 @@ impl GlobalEnvironment {
     /// lookups. This is useful for isolated Codex instances and tests.
     pub fn for_home(home: &Path) -> Self {
         Self {
+            claude_config_dir: home.join(".claude"),
             codex_home: home.join(".codex"),
             copilot_home: home.join(".copilot"),
+            hermes_home: home.join(".hermes"),
             xdg_config_home: home.join(".config"),
             home: home.to_path_buf(),
         }
@@ -85,22 +95,19 @@ fn target_path_for(
         } else {
             global_agent_root(root, agent, environment, target.home.as_deref())?
         };
+        let skills_dir = if agent.as_str() == "hermes" {
+            "skills-rtango"
+        } else {
+            "skills"
+        };
         return match kind {
             ExpandedKind::Skill(skill) => {
-                Ok(base.join("skills").join(&skill.name).join("SKILL.md"))
+                Ok(base.join(skills_dir).join(&skill.name).join("SKILL.md"))
             }
             ExpandedKind::SkillAsset(asset) => Ok(base
-                .join("skills")
+                .join(skills_dir)
                 .join(&asset.skill_name)
                 .join(&asset.relative_path)),
-            ExpandedKind::Agent(agent_file) => {
-                let suffix = if matches!(agent.as_str(), "pi" | "cursor") {
-                    format!("{}.md", agent_file.name)
-                } else {
-                    format!("{}.agent.md", agent_file.name)
-                };
-                Ok(base.join("agents").join(suffix))
-            }
             ExpandedKind::System(_) => unreachable!("handled above"),
         };
     }
@@ -109,6 +116,7 @@ fn target_path_for(
         "cursor" => ".cursor",
         "claude-code" => ".claude",
         "codex" => ".codex",
+        "hermes" => ".hermes",
         "pi" => ".pi",
         "opencode" => ".opencode",
         "plain" => "",
@@ -132,14 +140,6 @@ fn target_path_for(
             path.push(&asset.relative_path);
             Ok(path)
         }
-        ExpandedKind::Agent(a) => {
-            let file_name = if matches!(agent.as_str(), "pi" | "cursor") {
-                format!("{}.md", a.name)
-            } else {
-                format!("{}.agent.md", a.name)
-            };
-            Ok(PathBuf::from(format!("{prefix}agents/{file_name}")))
-        }
         ExpandedKind::System(_) => unreachable!("handled above"),
     }
 }
@@ -156,7 +156,7 @@ fn system_file_path_for(
             "copilot" => Ok(PathBuf::from(".github/copilot-instructions.md")),
             "cursor" => Ok(PathBuf::from("AGENTS.md")),
             "claude-code" => Ok(PathBuf::from("CLAUDE.md")),
-            "codex" | "pi" | "opencode" => Ok(PathBuf::from("AGENTS.md")),
+            "codex" | "hermes" | "pi" | "opencode" => Ok(PathBuf::from("AGENTS.md")),
             "plain" => Ok(PathBuf::from("system/AGENTS.md")),
             other => anyhow::bail!("unknown target agent: {other}"),
         },
@@ -179,6 +179,12 @@ fn system_file_path_for(
                 } else {
                     Ok(base.join("AGENTS.md"))
                 }
+            }
+            "hermes" => {
+                Ok(
+                    global_agent_root(root, agent, environment, target.home.as_deref())?
+                        .join("SOUL.md"),
+                )
             }
             "pi" | "opencode" => {
                 Ok(
@@ -203,10 +209,9 @@ fn global_agent_root(
 ) -> anyhow::Result<PathBuf> {
     if let Some(home) = custom_home {
         return Ok(match agent.as_str() {
-            "codex" | "copilot" => home.to_path_buf(),
+            "codex" | "copilot" | "claude-code" | "hermes" => home.to_path_buf(),
             "opencode" => home.join("opencode"),
             "cursor" => home.join(".cursor"),
-            "claude-code" => home.join(".claude"),
             "pi" => home.join(".pi/agent"),
             "plain" => home.join(".rtango"),
             other => anyhow::bail!("unknown target agent: {other}"),
@@ -215,9 +220,10 @@ fn global_agent_root(
     match agent.as_str() {
         "codex" => Ok(environment.codex_home.clone()),
         "copilot" => Ok(environment.copilot_home.clone()),
+        "claude-code" => Ok(environment.claude_config_dir.clone()),
+        "hermes" => Ok(environment.hermes_home.clone()),
         "opencode" => Ok(environment.xdg_config_home.join("opencode")),
         "cursor" => Ok(root.join(".cursor")),
-        "claude-code" => Ok(root.join(".claude")),
         "pi" => Ok(root.join(".pi/agent")),
         "plain" => Ok(root.join(".rtango")),
         other => anyhow::bail!("unknown target agent: {other}"),
@@ -270,21 +276,14 @@ pub fn render_for_agent_in_scope(
     let content = match &item.kind {
         ExpandedKind::System(s) => s.body.clone(),
         ExpandedKind::SkillAsset(asset) => asset.content.clone(),
-        ExpandedKind::Skill(_) | ExpandedKind::Agent(_) => {
+        ExpandedKind::Skill(s) => {
             let writer = agent::frontmatter_writer(&target.agent)
                 .ok_or_else(|| anyhow::anyhow!("unknown target agent: {}", target.agent))?;
-            let (fm, body) = match &item.kind {
-                ExpandedKind::Skill(s) => (&s.front_matter, &s.body),
-                ExpandedKind::Agent(a) => (&a.front_matter, &a.body),
-                ExpandedKind::SkillAsset(_) | ExpandedKind::System(_) => {
-                    unreachable!("handled above")
-                }
-            };
-            let yaml = writer.format_frontmatter(fm);
+            let yaml = writer.format_frontmatter(&s.front_matter);
             if yaml.is_empty() {
-                body.clone()
+                s.body.clone()
             } else {
-                join_frontmatter(&yaml, body)
+                join_frontmatter(&yaml, &s.body)
             }
         }
     };
@@ -487,7 +486,6 @@ fn compute_plan_from_expanded_rules(
             let source_file = match &exp_item.kind {
                 ExpandedKind::Skill(s) => &s.file,
                 ExpandedKind::SkillAsset(asset) => &asset.source_file,
-                ExpandedKind::Agent(a) => &a.file,
                 ExpandedKind::System(s) => &s.file,
             };
             if owners.get(source_file).map(String::as_str) != Some(rule.id.as_str()) {
@@ -735,9 +733,7 @@ fn resolve_one(
         .filter(|r| {
             matches!(
                 rule_kinds.get(r.as_str()),
-                Some(RuleKind::Skill { .. })
-                    | Some(RuleKind::Agent { .. })
-                    | Some(RuleKind::System)
+                Some(RuleKind::Skill { .. }) | Some(RuleKind::System)
             )
         })
         .collect();
@@ -842,7 +838,6 @@ fn collect_candidates_from_expanded_rules(
             let source_file = match &item.kind {
                 ExpandedKind::Skill(s) => s.file.clone(),
                 ExpandedKind::SkillAsset(asset) => asset.source_file.clone(),
-                ExpandedKind::Agent(a) => a.file.clone(),
                 ExpandedKind::System(s) => s.file.clone(),
             };
             candidates

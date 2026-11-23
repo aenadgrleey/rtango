@@ -102,20 +102,6 @@ pub enum RuleKind {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         exclude: Vec<String>,
     },
-    Agent {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        name: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        description: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        allowed_tools: Option<String>,
-    },
-    AgentSet {
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        include: Vec<String>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        exclude: Vec<String>,
-    },
     /// A root-level instruction file (CLAUDE.md, AGENTS.md, etc.).
     /// Source is one markdown file, written verbatim to the per-agent
     /// convention path with no frontmatter rewriting.
@@ -148,19 +134,6 @@ impl RuleKind {
     }
     pub fn skill_set() -> Self {
         RuleKind::SkillSet {
-            include: Vec::new(),
-            exclude: Vec::new(),
-        }
-    }
-    pub fn agent() -> Self {
-        RuleKind::Agent {
-            name: None,
-            description: None,
-            allowed_tools: None,
-        }
-    }
-    pub fn agent_set() -> Self {
-        RuleKind::AgentSet {
             include: Vec::new(),
             exclude: Vec::new(),
         }

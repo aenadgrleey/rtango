@@ -166,38 +166,23 @@ pub enum Command {
         /// Kind is a single skill
         #[arg(
             long = "skill",
-            conflicts_with_all = ["agent", "skill_set", "agent_set", "system", "collection_kind"]
+            conflicts_with_all = ["skill_set", "system", "collection_kind"]
         )]
         skill: bool,
-
-        /// Kind is a single agent
-        #[arg(
-            long = "agent",
-            conflicts_with_all = ["skill", "skill_set", "agent_set", "system", "collection_kind"]
-        )]
-        agent: bool,
 
         /// Kind is skill-set
         #[arg(
             long = "skill-set",
             visible_alias = "ss",
-            conflicts_with_all = ["skill", "agent", "agent_set", "system", "collection_kind"]
+            conflicts_with_all = ["skill", "system", "collection_kind"]
         )]
         skill_set: bool,
-
-        /// Kind is agent-set
-        #[arg(
-            long = "agent-set",
-            visible_alias = "as",
-            conflicts_with_all = ["skill", "agent", "skill_set", "system", "collection_kind"]
-        )]
-        agent_set: bool,
 
         /// Kind is a system instruction file (CLAUDE.md / AGENTS.md / etc.)
         #[arg(
             long = "system",
             conflicts_with_all = [
-                "skill", "agent", "skill_set", "agent_set", "collection_kind",
+                "skill", "skill_set", "collection_kind",
                 "name", "description", "allowed_tools", "include", "exclude",
             ]
         )]
@@ -208,7 +193,7 @@ pub enum Command {
             long = "collection-kind",
             visible_alias = "col",
             conflicts_with_all = [
-                "skill", "agent", "skill_set", "agent_set", "system",
+                "skill", "skill_set", "system",
                 "name", "description", "allowed_tools",
             ]
         )]
@@ -223,7 +208,7 @@ pub enum Command {
         #[arg(
             long = "name",
             value_name = "NAME",
-            conflicts_with_all = ["skill_set", "agent_set", "collection_kind"]
+            conflicts_with_all = ["skill_set", "collection_kind"]
         )]
         name: Option<String>,
 
@@ -231,7 +216,7 @@ pub enum Command {
         #[arg(
             long = "description",
             value_name = "TEXT",
-            conflicts_with_all = ["skill_set", "agent_set", "collection_kind"]
+            conflicts_with_all = ["skill_set", "collection_kind"]
         )]
         description: Option<String>,
 
@@ -239,7 +224,7 @@ pub enum Command {
         #[arg(
             long = "allowed-tools",
             value_name = "TOOLS",
-            conflicts_with_all = ["skill_set", "agent_set", "collection_kind"]
+            conflicts_with_all = ["skill_set", "collection_kind"]
         )]
         allowed_tools: Option<String>,
 
@@ -247,7 +232,7 @@ pub enum Command {
         #[arg(
             long = "include",
             value_name = "NAME",
-            conflicts_with_all = ["skill", "agent", "exclude"]
+            conflicts_with_all = ["skill", "exclude"]
         )]
         include: Vec<String>,
 
@@ -255,7 +240,7 @@ pub enum Command {
         #[arg(
             long = "exclude",
             value_name = "NAME",
-            conflicts_with_all = ["skill", "agent", "include"]
+            conflicts_with_all = ["skill", "include"]
         )]
         exclude: Vec<String>,
     },
@@ -308,9 +293,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             local,
             repo,
             skill,
-            agent,
             skill_set,
-            agent_set,
             system,
             collection_kind,
             schema,
@@ -327,9 +310,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
                 local,
                 repo,
                 skill,
-                agent,
                 skill_set,
-                agent_set,
                 system,
                 collection_kind,
                 schema,

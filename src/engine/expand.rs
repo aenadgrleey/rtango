@@ -28,7 +28,7 @@ pub fn expand_rule(root: &Path, rule: &Rule) -> anyhow::Result<Vec<ExpandedItem>
     }
 }
 
-/// Handle the non-collection kinds (skill, agent, skill-set, agent-set, system).
+/// Handle the non-collection kinds (skill, skill-set, system).
 fn expand_local_or_github(root: &Path, rule: &Rule) -> anyhow::Result<Vec<ExpandedItem>> {
     let (_, abs_path) = materialize(root, &rule.source)?;
 
@@ -36,25 +36,11 @@ fn expand_local_or_github(root: &Path, rule: &Rule) -> anyhow::Result<Vec<Expand
         RuleKind::SkillSet { include, exclude } => {
             expand_skill_set(rule, &abs_path, include, exclude)
         }
-        RuleKind::AgentSet { include, exclude } => {
-            expand_agent_set(rule, &abs_path, include, exclude)
-        }
         RuleKind::Skill {
             name,
             description,
             allowed_tools,
         } => expand_single_skill(
-            rule,
-            &abs_path,
-            name.as_deref(),
-            description.as_deref(),
-            allowed_tools.as_deref(),
-        ),
-        RuleKind::Agent {
-            name,
-            description,
-            allowed_tools,
-        } => expand_single_agent(
             rule,
             &abs_path,
             name.as_deref(),
@@ -221,40 +207,6 @@ fn expand_skill_set(
     Ok(items)
 }
 
-fn expand_agent_set(
-    rule: &Rule,
-    abs_path: &Path,
-    include: &[String],
-    exclude: &[String],
-) -> anyhow::Result<Vec<ExpandedItem>> {
-    // Read directly from the rule's `source` path. See expand_skill_set.
-    let mapper = agent::frontmatter_mapper(&rule.schema_agent)
-        .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", rule.schema_agent))?;
-    let agents = if rule.schema_agent.as_str() == "pi" {
-        agent::PiParser::parse_agents_in(abs_path, mapper.as_ref())?
-    } else if rule.schema_agent.as_str() == "cursor" {
-        agent::CursorParser::parse_agents_in(abs_path, mapper.as_ref())?
-    } else {
-        agent::parse_standard_agents(abs_path, mapper.as_ref())?
-    };
-    let mut items = Vec::new();
-    for ag in &agents {
-        if !passes_filter(&ag.name, include, exclude) {
-            continue;
-        }
-        let content = fs::read_to_string(&ag.file)?;
-        let hash = hash_content(&content);
-        items.push(ExpandedItem {
-            rule_id: rule.id.clone(),
-            source: rule.source.clone(),
-            source_content: content,
-            source_hash: hash,
-            kind: ExpandedKind::Agent(ag.clone()),
-        });
-    }
-    Ok(items)
-}
-
 fn expand_skill_assets(
     rule: &Rule,
     skill_name: &str,
@@ -371,62 +323,5 @@ fn expand_single_system(rule: &Rule, abs_path: &Path) -> anyhow::Result<Vec<Expa
         source_content: content,
         source_hash: hash,
         kind: ExpandedKind::System(system),
-    }])
-}
-
-fn expand_single_agent(
-    rule: &Rule,
-    abs_path: &Path,
-    override_name: Option<&str>,
-    override_description: Option<&str>,
-    override_allowed_tools: Option<&str>,
-) -> anyhow::Result<Vec<ExpandedItem>> {
-    let mapper = agent::frontmatter_mapper(&rule.schema_agent)
-        .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", rule.schema_agent))?;
-
-    if !abs_path.is_file() {
-        anyhow::bail!("agent file not found: {}", abs_path.display());
-    }
-    let file_name = abs_path
-        .file_name()
-        .ok_or_else(|| anyhow::anyhow!("agent path has no file name"))?
-        .to_string_lossy();
-    let agent_name = if rule.schema_agent.as_str() == "pi" {
-        file_name
-            .strip_suffix(".md")
-            .ok_or_else(|| anyhow::anyhow!("pi agent file must end with .md: {}", file_name))?
-            .to_owned()
-    } else {
-        file_name
-            .strip_suffix(".agent.md")
-            .ok_or_else(|| anyhow::anyhow!("agent file must end with .agent.md: {}", file_name))?
-            .to_owned()
-    };
-    let content = fs::read_to_string(abs_path)?;
-    let (yaml, body) = split_frontmatter(&content);
-    let mut front_matter = match yaml {
-        Some(y) => mapper.parse_frontmatter(y)?,
-        None => FrontMatter::default(),
-    };
-    apply_overrides(
-        &mut front_matter,
-        mapper.as_ref(),
-        override_name,
-        override_description,
-        override_allowed_tools,
-    );
-    let hash = hash_content(&content);
-    let agent = crate::agent::Agent {
-        name: agent_name,
-        file: abs_path.to_path_buf(),
-        front_matter,
-        body: body.to_string(),
-    };
-    Ok(vec![ExpandedItem {
-        rule_id: rule.id.clone(),
-        source: rule.source.clone(),
-        source_content: content,
-        source_hash: hash,
-        kind: ExpandedKind::Agent(agent),
     }])
 }

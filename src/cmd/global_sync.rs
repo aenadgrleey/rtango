@@ -309,7 +309,7 @@ fn validate_targets(spec: &crate::spec::Spec) -> anyhow::Result<()> {
         if target.agent.as_str() == "plain"
             || !matches!(
                 target.agent.as_str(),
-                "claude-code" | "codex" | "copilot" | "cursor" | "opencode" | "pi"
+                "claude-code" | "codex" | "copilot" | "cursor" | "hermes" | "opencode" | "pi"
             )
             || agent::frontmatter_writer(&target.agent).is_none()
         {
@@ -358,8 +358,10 @@ fn validate_prunable_orphans(
 fn global_registry_roots(environment: &GlobalEnvironment) -> Vec<PathBuf> {
     vec![
         environment.home.clone(),
+        environment.claude_config_dir.clone(),
         environment.codex_home.clone(),
         environment.copilot_home.clone(),
+        environment.hermes_home.clone(),
         environment.xdg_config_home.join("opencode"),
     ]
 }

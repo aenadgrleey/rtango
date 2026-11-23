@@ -1,12 +1,12 @@
 # rtango
 
-Package manager for AI-agent skills, agents, and configuration files.
+Package manager for AI-agent skills and system instruction files.
 
 Author a skill once — in whichever agent's format you prefer — and `rtango` renders and syncs copies to every other agent's native layout (frontmatter, permission schema, target paths) from a single source of truth.
 
 ## Why
 
-Modern projects juggle several coding agents (Claude Code, Copilot, Cursor, Codex, OpenCode, Pi, …). Each one stores skills, agents, and instruction files in different paths with different frontmatter and different permission vocabularies. Hand-porting and keeping them in sync is tedious and error-prone.
+Modern projects juggle several coding agents (Claude Code, Copilot, Cursor, Codex, OpenCode, Pi, Hermes, …). Each one stores skills and instruction files in different paths with different frontmatter and different permission vocabularies. Hand-porting and keeping them in sync is tedious and error-prone.
 
 `rtango` treats this like a package manager: declare rules in `.rtango/spec.yaml`, run `rtango sync`, and every agent gets an up-to-date rendering.
 
@@ -75,24 +75,24 @@ rtango wander --ignore-fetch-failures
 | `global-sync` | Render `~/.rtango/spec.yaml` into global agent registries. Use `--spec PATH` as an override; targets can come from the spec, per-rule `targets`, or compatibility CLI arguments. Supports `--check`, `--force`, `--prune`, and `--lock`. Alias: `sync-global`. |
 | `status` | Preview the sync plan without writing. `--verbose` shows up-to-date items too. `--ignore-fetch-failures` skips GitHub rules whose fetch fails. |
 | `own`    | Record or clear a manual ownership decision when multiple rules target the same path. |
-| `add`    | Mechanically append a rule to the spec. Kinds: `--skill`, `--agent`, `--skill-set`, `--agent-set`, `--system`, `--collection-kind`/`--col`. |
+| `add`    | Mechanically append a rule to the spec. Kinds: `--skill`, `--skill-set`, `--system`, `--collection-kind`/`--col`. |
 
 ## Core concepts
 
 - **Rule** — a `{source, schema_agent, kind}` declaration in `spec.yaml`. Source is a local path or `github: owner/repo@ref:path`. `schema_agent` names the authoritative agent whose format the source is written in.
-- **Kinds** — `skill`, `skill-set`, `agent`, `agent-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md`), `collection` (import rules from another repo's `.rtango/spec.yaml`).
+- **Kinds** — `skill`, `skill-set`, `system` (root-level instruction files like `AGENTS.md` / `CLAUDE.md` / `SOUL.md`), `collection` (import rules from another repo's `.rtango/spec.yaml`).
 - **Rendering** — for each agent in `spec.agents`, rtango rewrites frontmatter and permission tokens into that agent's native schema and writes to its canonical path. The `schema_agent`'s own target is auto-skipped when source and target paths collide.
 - **System files** — a `kind: system` rule copies one markdown source verbatim to each selected agent's instruction-file convention. The current target paths are:
 
   | Agent | Target |
   | --- | --- |
   | Claude Code | `CLAUDE.md` |
-  | Codex, Cursor, OpenCode, Pi | `AGENTS.md` |
+  | Codex, Cursor, OpenCode, Pi, Hermes | `AGENTS.md` |
   | GitHub Copilot | `.github/copilot-instructions.md` |
   | Plain | `system/AGENTS.md` |
 
 - **Lock** — `.rtango/lock.yaml` records what was written, content hashes, and ownership decisions. Changes to target files detected outside rtango are caught by the `on_target_modified` policy (`fail` / `overwrite` / `skip`).
-- **Managed `.gitignore`** — optionally keep projected targets in a dedicated rtango block. Skill projections are ignored precisely as leaf directories (for example `.pi/skills/reviewer/`), while agent/system projections are ignored as exact files; broad roots like `.pi/` are never ignored.
+- **Managed `.gitignore`** — optionally keep projected targets in a dedicated rtango block. Skill projections are ignored precisely as leaf directories (for example `.pi/skills/reviewer/`), while system projections are ignored as exact files; broad roots like `.pi/` are never ignored.
 
 ## Global registry sync
 
@@ -141,37 +141,32 @@ Add scaffolds directly to the default spec:
 
 ```sh
 rtango add --global reviewer --skill --target codex=~/.codex/work
-rtango add --global planner --agent --target codex=~/.codex/work
 ```
 
-Without `--local` or `--repo`, these commands create editable sources under
+Without `--local` or `--repo`, this command creates editable sources under
 `~/.rtango/sources/`.
 
 Global skills use the documented shared Agent Skills directory for Codex,
 `~/.agents/skills/`; project-scoped Codex output remains `.codex/skills`.
-Global file-backed instruction targets are `~/.claude/CLAUDE.md`,
+Global file-backed instruction targets are `$CLAUDE_CONFIG_DIR/CLAUDE.md` (default `~/.claude/CLAUDE.md`),
 `$CODEX_HOME/AGENTS.md`, `~/.copilot/copilot-instructions.md`,
-`$XDG_CONFIG_HOME/opencode/AGENTS.md`, and `~/.pi/agent/AGENTS.md`.
-The command honors `CODEX_HOME`, `COPILOT_HOME`, and `XDG_CONFIG_HOME` from
-its process environment, so separate Codex profiles can be synchronized by
-invoking it with the desired `CODEX_HOME` value. Codex's current user skill
-registry is shared at `~/.agents/skills/`, independently of that profile.
-When a rule declares an explicit target `home`, Codex skills are written below
-that profile's `skills/` directory instead, which makes multiple isolated
-profiles declarative.
+`$XDG_CONFIG_HOME/opencode/AGENTS.md`, `~/.pi/agent/AGENTS.md`, and `$HERMES_HOME/SOUL.md`.
+The command honors `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `COPILOT_HOME`, `XDG_CONFIG_HOME`, and `HERMES_HOME` from
+its process environment, and an explicit rule `targets[].home` redirects each profile directly (for example `claude-code` `home: ~/.claude-t3/personal` writes to `~/.claude-t3/personal/{CLAUDE.md,skills/}`, and `hermes` `home: ~/.hermes/profiles/pachca` writes to `~/.hermes/profiles/pachca/{SOUL.md,skills-rtango/}`).
 Cursor User Rules are settings-backed rather than a documented global file, so
 global system rules for `cursor` are rejected; global skills remain supported.
 
 The complete global registry matrix is:
 
-| Agent | Skills | Agent files | System instructions |
-| --- | --- | --- | --- |
-| Claude Code | `~/.claude/skills/` | `~/.claude/agents/<name>.agent.md` | `~/.claude/CLAUDE.md` |
-| Codex | `~/.agents/skills/` | `$CODEX_HOME/agents/<name>.agent.md` | `$CODEX_HOME/AGENTS.md` (or existing `AGENTS.override.md`) |
-| Copilot CLI | `$COPILOT_HOME/skills/` | `$COPILOT_HOME/agents/<name>.agent.md` | `$COPILOT_HOME/copilot-instructions.md` |
-| Cursor | `~/.cursor/skills/` | `~/.cursor/agents/<name>.md` | Not file-backed; rejected |
-| OpenCode | `$XDG_CONFIG_HOME/opencode/skills/` | `$XDG_CONFIG_HOME/opencode/agents/<name>.agent.md` | `$XDG_CONFIG_HOME/opencode/AGENTS.md` |
-| Pi | `~/.pi/agent/skills/` | `~/.pi/agent/agents/<name>.md` | `~/.pi/agent/AGENTS.md` |
+| Agent | Skills | System instructions |
+| --- | --- | --- |
+| Claude Code | `$CLAUDE_CONFIG_DIR/skills/` (default `~/.claude/skills/`) | `$CLAUDE_CONFIG_DIR/CLAUDE.md` |
+| Codex | `~/.agents/skills/` (or `<target.home>/skills/`) | `$CODEX_HOME/AGENTS.md` (or existing `AGENTS.override.md`) |
+| Copilot CLI | `$COPILOT_HOME/skills/` | `$COPILOT_HOME/copilot-instructions.md` |
+| Cursor | `~/.cursor/skills/` (or `<target.home>/.cursor/skills/`) | Not file-backed; rejected |
+| OpenCode | `$XDG_CONFIG_HOME/opencode/skills/` | `$XDG_CONFIG_HOME/opencode/AGENTS.md` |
+| Pi | `~/.pi/agent/skills/` | `~/.pi/agent/AGENTS.md` |
+| Hermes | `$HERMES_HOME/skills-rtango/` (mount via `skills.external_dirs`) | `$HERMES_HOME/SOUL.md` |
 
 The paths above show defaults; `CODEX_HOME`, `COPILOT_HOME`, and
 `XDG_CONFIG_HOME` can redirect the corresponding registries. A rule-level
@@ -226,7 +221,7 @@ After changing shared agent files or `.rtango/spec.yaml`, run:
 
 ## Supported agents
 
-Claude Code, GitHub Copilot, Cursor, Codex, OpenCode, Pi. Each has its own parser, writer, and permission mapper under `src/agent/`.
+Claude Code, GitHub Copilot, Cursor, Codex, OpenCode, Pi, Hermes. Each has its own parser, writer, and permission mapper under `src/agent/`.
 
 ## Layout
 

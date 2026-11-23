@@ -6,14 +6,12 @@ use crate::spec::{AgentName, RuleKind};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceKind {
     SkillSet,
-    AgentSet,
 }
 
 impl From<SourceKind> for RuleKind {
     fn from(kind: SourceKind) -> Self {
         match kind {
             SourceKind::SkillSet => RuleKind::skill_set(),
-            SourceKind::AgentSet => RuleKind::agent_set(),
         }
     }
 }
@@ -44,14 +42,4 @@ pub fn dir_has_standard_skills(dir: &Path) -> bool {
     entries
         .filter_map(|e| e.ok())
         .any(|e| e.path().is_dir() && e.path().join("SKILL.md").is_file())
-}
-
-/// Check if a directory contains at least one standard agent (`*.agent.md`).
-pub fn dir_has_standard_agents(dir: &Path) -> bool {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return false;
-    };
-    entries
-        .filter_map(|e| e.ok())
-        .any(|e| e.path().is_file() && e.file_name().to_string_lossy().ends_with(".agent.md"))
 }
