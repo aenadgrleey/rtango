@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/aenadgrleey/rtango/compare/v0.5.2...v0.6.0) - 2026-11-23
+
+### Added
+
+- add hermes support, direct claude profile homes, and drop agent kinds
+
+### Other
+
+- run cargo fmt
+- clarify global registry paths
+
 ## [0.5.2](https://github.com/aenadgrleey/rtango/compare/v0.5.1...v0.5.2) - 2026-08-25
 
 ### Added
